@@ -26,7 +26,7 @@ Plano pessoal de compras de criptomoedas na Kraken Pro, com um aporte mensal fix
 
 ## 2. Patamares de compra (BTC)
 
-Quando o BTC toca um patamar, o bot avisa. Compras tu na Kraken e marcas no bot, com `feito 68k` ou `saltar 68k`.
+Quando o BTC toca um patamar, o bot avisa com os botões ✅ Feito e ❌ Adiar. Compras tu na Kraken e carregas em Feito. Os comandos `feito 68k` e `saltar 68k` continuam a funcionar.
 
 | Patamar (USD) | Quanto investir | Regra |
 |---|---|---|
@@ -36,7 +36,9 @@ Quando o BTC toca um patamar, o bot avisa. Compras tu na Kraken e marcas no bot,
 | 53.000 | o dinheiro parado que sobrar (máximo) | aviso ao tocar. A compra só se sugere depois de um fecho semanal acima de 63.000 USD |
 
 - Um patamar marcado como **feito** deixa de avisar.
+- ❌ **Adiar** mantém o patamar aberto e o bot volta a perguntar em 7 dias, se o BTC continuar no patamar ou abaixo. O dinheiro continua reservado.
 - Um patamar marcado como **saltar** devolve o valor ao dinheiro parado.
+- No máximo, ❌ Adiar deixa a decisão para o próximo domingo.
 - O máximo espera pelo fecho semanal porque, em 2018 e em 2022, o primeiro toque em −57,5% do máximo foi seguido de novas quedas de 45% a 61%.
 
 ## 3. Libertação do dinheiro parado
