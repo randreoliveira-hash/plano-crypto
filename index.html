@@ -49,8 +49,11 @@
   .buychip .amt{font-size:17px;font-weight:800;color:var(--ok)}
   .buychip.zero .amt{color:var(--mut);font-weight:600;font-size:14px}
   .qtdbuy{font-size:11px;color:var(--mut);margin-top:6px;min-height:14px}
-  .cpbtn{margin-top:6px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;border:1px solid rgba(52,211,153,.55);background:rgba(52,211,153,.12);color:var(--ok);cursor:pointer}
-  .cpbtn.ok{background:var(--ok);color:#06241a}
+  .cpicon{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;width:22px;height:22px;margin-left:6px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--mut);opacity:.7;cursor:pointer}
+  .cpicon[hidden]{display:none}
+  .cpicon svg{width:14px;height:14px;fill:currentColor}
+  .cpicon:hover,.cpicon:active{opacity:1;color:var(--txt)}
+  .cpicon.ok{color:var(--ok);opacity:1}
   .summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
   @media(min-width:700px){.summary{grid-template-columns:repeat(3,1fr)}}
   .sum{background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:12px;padding:10px}
@@ -322,10 +325,11 @@ async function abrirCom(p){
 }
 
 // ===== Interface (original) =====
+const ICON_COPIAR='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
 const COPIAR={};   // texto exato a copiar para a Kraken (quantidade a comprar em cada posição)
 function copiarTexto(t,btn){
-  const fim=()=>{const antes=btn.textContent;btn.textContent='copiado ✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent=antes;btn.classList.remove('ok');},1500);};
-  const alternativa=()=>{const ta=document.createElement('textarea');ta.value=t;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy');}catch(e){}document.body.removeChild(ta);if(ok)fim();else btn.textContent='não copiou';};
+  const fim=()=>{btn.classList.add('ok');btn.title='copiado ✓';setTimeout(()=>{btn.classList.remove('ok');btn.title='copiar quantidade a comprar';},1200);};
+  const alternativa=()=>{const ta=document.createElement('textarea');ta.value=t;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy');}catch(e){}document.body.removeChild(ta);if(ok)fim();else btn.title='não copiou';};
   if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(fim).catch(alternativa);}
   else alternativa();
 }
@@ -337,7 +341,7 @@ function buildCoins(){
       '<div class="top">'
       +'<img class="logo" src="'+c.icon+'" alt="'+c.sym+'" onerror="this.style.display=\'none\';var d=this.nextElementSibling;if(d)d.style.display=\'flex\';">'
       +'<div class="dot" style="background:'+c.color+';color:'+c.fg+'">'+c.sym[0]+'</div>'
-      +'<div><div class="sym">'+c.sym+'</div><div class="name">'+c.name+'</div></div>'
+      +'<div><div class="sym">'+c.sym+'<button type="button" class="cpicon" id="cp_'+c.sym+'" title="copiar quantidade a comprar" hidden>'+ICON_COPIAR+'</button></div><div class="name">'+c.name+'</div></div>'
       +'<div class="winp"><label>Alvo %</label><input id="w_'+c.sym+'" inputmode="decimal" value="'+c.w+'"></div>'
       +'</div>'
       +'<div class="fields">'
@@ -347,7 +351,7 @@ function buildCoins(){
       +'<div><label>Valor atual</label><div class="price" id="v_'+c.sym+'">—</div></div>'
       +'</div>'
       +'<div class="buychip" id="chip_'+c.sym+'">'
-      +'<div><div class="lbl">A COMPRAR</div><div class="amt"><span id="b_'+c.sym+'">—</span><span class="qty" id="bq_'+c.sym+'"></span></div><button type="button" class="cpbtn" id="cp_'+c.sym+'" hidden>copiar qtd</button></div>'
+      +'<div><div class="lbl">A COMPRAR</div><div class="amt"><span id="b_'+c.sym+'">—</span><span class="qty" id="bq_'+c.sym+'"></span></div></div>'
       +'<div style="text-align:right"><div class="lbl">ALVO</div><div class="amt" id="a_'+c.sym+'" style="color:var(--txt);font-size:14px">—</div></div>'
       +'</div>'
       +'<div class="qtdbuy" id="n_'+c.sym+'"></div>';
