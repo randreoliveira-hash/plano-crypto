@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plano Crypto — Compras por Metas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{--bg0:#0b1020;--bg1:#111a33;--card:#151d36;--card2:#1b2547;--line:rgba(255,255,255,.09);--txt:#eaeefb;--mut:#93a0c2;--ok:#34d399;--warn:#fbbf24;--bad:#fb7185;--acc:#22d3ee;--acc2:#8b5cf6}
   *{box-sizing:border-box;font-family:system-ui,'Segoe UI',Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -58,10 +59,12 @@
   .warn{color:var(--warn);font-size:12.5px}
   .note{color:var(--mut);font-size:11.5px;line-height:1.6;margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
   .note code{background:rgba(255,255,255,.07);padding:1px 4px;border-radius:4px}
+  .sync-badge{display:inline-block;font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(34,211,238,.15);color:var(--acc);border:1px solid rgba(34,211,238,.3);margin-left:8px;vertical-align:middle}
+  .sync-badge.off{background:rgba(251,113,133,.15);color:var(--bad);border-color:rgba(251,113,133,.3)}
 </style>
 </head>
 <body>
-<h1>Plano Crypto</h1>
+<h1>Plano Crypto <span id="syncBadge" class="sync-badge off">offline</span></h1>
 <div class="sub">Compras por metas com preços ao vivo. Sem chaves, sem contas — nunca insiras chaves de API ou seeds aqui.</div>
 <div class="chips" id="chips"></div>
 
@@ -72,7 +75,7 @@
     <input id="aporte" class="aporte" inputmode="decimal" placeholder="0,00">
     <div class="rowbtns" style="justify-content:center;margin-top:14px">
       <button id="btnRefresh">Atualizar preços</button>
-      <button class="green" id="btnSave">Guardar</button>
+      <button class="green" id="btnSave">Guardar na nuvem</button>
       <label><input type="checkbox" id="auto" checked> Auto 60s</label>
     </div>
   </div>
@@ -80,7 +83,7 @@
 </div>
 
 <div class="card">
-  <h2>Carteira &amp; compras</h2>
+  <h2>Carteira & compras</h2>
   <div class="coins" id="coins"></div>
   <div class="summary">
     <div class="sum"><div class="k">Valor atual</div><div class="v" id="tVal">—</div></div>
@@ -90,7 +93,7 @@
   <div class="warn" id="wsum" style="display:none;margin-top:9px"></div>
   <div class="note">
     • "A COMPRAR" = repartição do aporte de hoje pelos desvios até às metas — a soma é sempre igual ao aporte (nunca gasta mais do que o aporte). Se ficares acima da meta numa moeda, ela não recebe compra (a app nunca te diz para vender).<br>
-    • Quantidades e pesos ficam guardados neste navegador (localStorage).<br>
+    • Dados guardados na nuvem (Supabase) — sincroniza entre dispositivos. Fallback local se offline.<br>
     • Fontes: CoinGecko <code>api.coingecko.com</code> e Kraken <code>api.kraken.com/0/public/Ticker</code> (públicas, sem chave). Dados podem atrasar e diferem do preço de execução na exchange.<br>
     • Fisco (PT): plano todo cripto→cripto não tributa no momento; declarar operações no anexo G1 (Portal das Finanças).<br>
     • Isto não é aconselhamento financeiro. As decisões e as ordens são tuas.
@@ -98,7 +101,17 @@
 </div>
 
 <script>
-const COINS=[
+// ==== CONFIGURAÇÃO SUPABASE ====
+const SUPABASE_URL = 'https://gzarjkhmohaxrgpxzuqy.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_9uHmY3N2IL7QVP1qDECYOQ_fv1ySM_r';
+// =================================
+
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const LOCAL_KEY='planoCryptoV1';
+let userId = null;
+let isOnline = false;
+
+const COINS = [
  {sym:'BTC', name:'Bitcoin',  cg:'bitcoin',  kr:['XXBT','XBT'],   w:30, color:'#f7931a', fg:'#1a1206', icon:'https://coin-images.coingecko.com/coins/images/1/small/bitcoin.png?1696501400'},
  {sym:'ETH', name:'Ethereum', cg:'ethereum', kr:['XETH','ETH'],   w:20, color:'#8ea2ff', fg:'#101528', icon:'https://coin-images.coingecko.com/coins/images/279/small/ethereum.png?1696501628'},
  {sym:'SOL', name:'Solana',   cg:'solana',   kr:['SOL'],          w:20, color:'#14f195', fg:'#05261a', icon:'https://coin-images.coingecko.com/coins/images/4128/small/solana.png?1718769756'},
@@ -106,142 +119,283 @@ const COINS=[
  {sym:'AAVE',name:'Aave',     cg:'aave',     kr:['AAVE'],         w:10, color:'#c86cc0', fg:'#ffffff', icon:'https://coin-images.coingecko.com/coins/images/12645/small/aave-token-round.png?1720472354'},
  {sym:'ARB', name:'Arbitrum', cg:'arbitrum', kr:['ARB'],          w:10, color:'#37a5f5', fg:'#07202f', icon:'https://coin-images.coingecko.com/coins/images/16547/small/arb.jpg?1721358242'}
 ];
-const KEY='planoCryptoV1';
-let price={}; // sym -> {p: number}
-let lastOk=null;
+let price = {};
+let lastOk = null;
 
-function load(){try{const s=dataLoad();if(s){const d=JSON.parse(s);COINS.forEach(c=>{if(d[c.sym]){if(d[c.sym].q!=null)c.q=d[c.sym].q;if(d[c.sym].m!=null)c.m=d[c.sym].m;if(d[c.sym].w!=null)c.w=d[c.sym].w;}});}}catch(e){}}
-function dataSave(json){try{localStorage.setItem(KEY,json);return true;}catch(e){try{document.cookie=KEY+'='+encodeURIComponent(json)+';max-age=31536000;path=/';return true;}catch(e2){return false;}}}
-function dataLoad(){try{const s=localStorage.getItem(KEY);if(s)return s;}catch(e){}try{const m=document.cookie.match(new RegExp('(?:^|; )'+KEY+'=([^;]*)'));if(m)return decodeURIComponent(m[1]);}catch(e){}return null;}
-function save(){const d={cfg:{}};COINS.forEach(c=>d[c.sym]={q:el('q_'+c.sym).value,m:el('m_'+c.sym).value,w:el('w_'+c.sym).value});d.cfg={aporte:el('aporte').value};return dataSave(JSON.stringify(d));}
 function el(id){return document.getElementById(id)}
 function num(v){return parseFloat(String(v).replace(',','.'))||0}
 function fmt(n,d){if(!isFinite(n))return '—';return n.toLocaleString('pt-PT',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})+' €'}
-
-function buildCoins(){
-  const box=el('coins');box.innerHTML='';
-  COINS.forEach(c=>{
-    const card=document.createElement('div');card.className='coin';
-    card.innerHTML=
-      '<div class="top">'
-      +'<img class="logo" src="'+c.icon+'" alt="'+c.sym+'" onerror="this.style.display=\'none\';var d=this.nextElementSibling;if(d)d.style.display=\'flex\';">'
-      +'<div class="dot" style="background:'+c.color+';color:'+c.fg+'">'+c.sym[0]+'</div>'
-      +'<div><div class="sym">'+c.sym+'</div><div class="name">'+c.name+'</div></div>'
-      +'<div class="winp"><label>Alvo %</label><input id="w_'+c.sym+'" inputmode="decimal" value="'+c.w+'"></div>'
-      +'</div>'
-      +'<div class="fields">'
-      +'<div><label>Tens (qtd)</label><input id="q_'+c.sym+'" inputmode="decimal" placeholder="0"></div>'
-      +'<div><label>Preço live</label><div class="price" id="p_'+c.sym+'">—</div></div>'
-      +'<div><label>Preço manual €</label><input id="m_'+c.sym+'" inputmode="decimal" placeholder="off"></div>'
-      +'<div><label>Valor atual</label><div class="price" id="v_'+c.sym+'">—</div></div>'
-      +'</div>'
-      +'<div class="buychip" id="chip_'+c.sym+'">'
-      +'<div><div class="lbl">A COMPRAR</div><div class="amt"><span id="b_'+c.sym+'">—</span><span class="qty" id="bq_'+c.sym+'"></span></div></div>'
-      +'<div style="text-align:right"><div class="lbl">ALVO</div><div class="amt" id="a_'+c.sym+'" style="color:var(--txt);font-size:14px">—</div></div>'
-      +'</div>'
-      +'<div class="qtdbuy" id="n_'+c.sym+'"></div>';
-    box.appendChild(card);
-    ['q_'+c.sym,'m_'+c.sym,'w_'+c.sym].forEach(id=>el(id).addEventListener('input',()=>{update();save();}));
-  });
-  ['aporte'].forEach(id=>el(id).addEventListener('input',()=>{update();save();}));
-}
-function buildChips(){
-  el('chips').innerHTML=COINS.map(c=>'<span class="chip" style="border-color:'+c.color+'66"><span style="color:'+c.color+'">●</span> '+c.sym+' <b id="chipw_'+c.sym+'">—</b></span>').join('');
-}
-
-function effPrice(c){const m=num(el('m_'+c.sym).value);if(m>0)return {p:m,manual:true};const r=price[c.sym];return r?{p:r.p,manual:false}:null}
-
-async function refresh(){
-  el('status').textContent='A atualizar preços…';
-  const ids=COINS.map(c=>c.cg).join(',');
-  let got=false, src='';
-  try{
-    const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids='+ids+'&vs_currencies=eur');
-    const j=await r.json();let all=true;
-    COINS.forEach(c=>{const v=j[c.cg]&&j[c.cg].eur;if(v>0){price[c.sym]={p:v};}else all=false;});
-    if(all){got=true;src='CoinGecko';}
-  }catch(e){}
-  if(!got){
-    try{
-      const pair='XXBTZEUR,XETHZEUR,SOLEUR,LINKEUR,AAVEEUR,ARBEUR';
-      const r=await fetch('https://api.kraken.com/0/public/Ticker?pair='+encodeURIComponent(pair));
-      const j=await r.json();const res=j.result||{};let all=true;
-      COINS.forEach(c=>{
-        let p=null;
-        for(const k in res){
-          let base=k.endsWith('ZEUR')?k.slice(0,-4):k.slice(0,-3);
-          if(base.length>3&&base[0]==='X')base=base.slice(1);
-          if(c.kr.indexOf(base)>=0){const v=parseFloat(res[k].c[0]);if(v>0){p=v;break;}}
-        }
-        if(p>0){price[c.sym]={p};}else all=false;
-      });
-      if(all){got=true;src='Kraken';}
-    }catch(e){}
-  }
-  lastOk=new Date();
-  update();
-  el('status').textContent=got?('Fonte: '+src+' · atualizado às '+lastOk.toLocaleTimeString('pt-PT')):'FALHA nas duas fontes — preços podem estar desatualizados. Usa o campo "Preço manual €".';
-}
-
-function update(){
-  let totVal=0;
-  COINS.forEach(c=>{
-    const q=num(el('q_'+c.sym).value);const ep=effPrice(c);
-    const v=q*(ep?ep.p:0);totVal+=v;
-    el('p_'+c.sym).textContent=ep?(fmt(ep.p, ep.p<1?4:2)+(ep.manual?' (m)':'')):'—';
-    el('v_'+c.sym).textContent=fmt(v);
-    const cw=el('chipw_'+c.sym);if(cw)cw.textContent=fmt0(num(el('w_'+c.sym).value))+'%';
-  });
-  let sumW=0;COINS.forEach(c=>{sumW+=num(el('w_'+c.sym).value);});
-  const wsum=el('wsum');
-  if(Math.abs(sumW-100)>0.01){wsum.style.display='block';wsum.textContent='⚠️ Os pesos somam '+fmt0(sumW)+'% — devem somar 100%.';}
-  else{wsum.style.display='none';}
-  const aporte=num(el('aporte').value);
-  const total=totVal+aporte;
-  // desvios até às metas (gap) e repartição do aporte pelos gaps
-  let sumD=0;const gap={};
-  COINS.forEach(c=>{
-    const w=num(el('w_'+c.sym).value);const a=total*w/100;
-    const ep=effPrice(c);const v=num(el('q_'+c.sym).value)*(ep?ep.p:0);
-    gap[c.sym]=Math.max(0,a-v);sumD+=gap[c.sym];
-    el('a_'+c.sym).textContent=fmt(a);
-  });
-  let totBuy=0;
-  COINS.forEach(c=>{
-    const ep=effPrice(c);
-    const d=gap[c.sym];
-    const buy=(aporte>0&&sumD>0)?aporte*d/sumD:0;
-    const chip=el('chip_'+c.sym);
-    if(buy>0.005){el('b_'+c.sym).textContent=fmt(buy);chip.classList.remove('zero');totBuy+=buy;
-      el('bq_'+c.sym).textContent=ep?(' '+fmt(buy/ep.p,ep.p<1?2:6)+' '+c.sym):'';
-      el('n_'+c.sym).textContent=d>0.005?('desvio p/ meta: '+fmt(d)):'em linha com a meta';}
-    else{el('b_'+c.sym).textContent='nada hoje';chip.classList.add('zero');el('bq_'+c.sym).textContent='';
-      el('n_'+c.sym).textContent=d>0.005?('desvio p/ meta: '+fmt(d)):'em linha com a meta';}
-  });
-  el('tVal').textContent=fmt(totVal);el('tAlvo').textContent=fmt(total);el('tBuy').textContent=fmt(totBuy);
-}
 function fmt0(n){return n.toLocaleString('pt-PT',{maximumFractionDigits:2})}
 
-buildCoins();load();
-['aporte'].forEach(id=>{const c=cfgVal(id);if(c!=null)el(id).value=c;});
-function cfgVal(id){try{const s=dataLoad();if(!s)return null;const d=JSON.parse(s);return d.cfg&&d.cfg[id]!=null?d.cfg[id]:null;}catch(e){return null}}
-COINS.forEach(c=>{try{const s=dataLoad();if(!s)return;const d=JSON.parse(s);if(d[c.sym]){if(d[c.sym].q!=null)el('q_'+c.sym).value=d[c.sym].q;if(d[c.sym].m!=null)el('m_'+c.sym).value=d[c.sym].m;if(d[c.sym].w!=null)el('w_'+c.sym).value=d[c.sym].w;}}catch(e){}});
-buildChips();
-update();
-el('btnRefresh').addEventListener('click',refresh);
-el('btnSave').addEventListener('click',()=>{const ok=save();el('status').textContent=ok?('Dados gravados neste dispositivo às '+new Date().toLocaleTimeString('pt-PT')+' ✓'):'Gravação bloqueada (modo privado/preview) — os dados só ficam nesta sessão.';});
-window.addEventListener('pagehide',save);
-el('auto').addEventListener('change',()=>{if(el('auto').checked)start();else clearInterval(timer);});
-let timer=null;
-function start(){if(timer)clearInterval(timer);timer=setInterval(()=>{if(el('auto').checked)refresh();},60000);}
-// Instalável como app (quando servida por HTTPS): manifesto gerado em runtime
-try{
-  const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="#0b1020"/><circle cx="96" cy="96" r="58" fill="none" stroke="#22d3ee" stroke-width="10"/><path d="M96 52v88" stroke="#8b5cf6" stroke-width="10" stroke-linecap="round"/><path d="M70 96h52" stroke="#34d399" stroke-width="10" stroke-linecap="round"/></svg>';
-  const icon='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
-  const mf={name:'Plano Crypto',short_name:'Plano Crypto',start_url:location.href.split('#')[0],scope:'./',display:'standalone',background_color:'#0b1020',theme_color:'#0b1020',icons:[{src:icon,sizes:'any',type:'image/svg+xml',purpose:'any'}]};
-  const lk=document.createElement('link');lk.rel='manifest';lk.href='data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(mf));document.head.appendChild(lk);
-}catch(e){}
-refresh();start();
+async function initAuth() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    userId = session.user.id;
+  } else {
+    userId = localStorage.getItem('anon_id') || 'anon-' + crypto.randomUUID();
+    localStorage.setItem('anon_id', userId);
+  }
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      userId = session.user.id;
+      loadFromCloud();
+    }
+  });
+  await checkOnline();
+  loadFromCloud();
+}
+
+async function checkOnline() {
+  try {
+    const { error } = await supabase.from('plano_crypto').select('user_id').eq('user_id', userId).limit(1);
+    isOnline = !error;
+    updateSyncBadge();
+  } catch (e) {
+    isOnline = false;
+    updateSyncBadge();
+  }
+}
+
+function updateSyncBadge() {
+  const badge = el('syncBadge');
+  if (isOnline) {
+    badge.textContent = 'online ☁️';
+    badge.classList.remove('off');
+  } else {
+    badge.textContent = 'offline 💾';
+    badge.classList.add('off');
+  }
+}
+
+async function loadFromCloud() {
+  if (!isOnline) return loadLocal();
+  try {
+    const { data, error } = await supabase
+      .from('plano_crypto')
+      .select('data')
+      .eq('user_id', userId)
+      .single();
+    if (!error && data?.data) {
+      applyData(data.data);
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(data.data));
+      el('status').textContent = 'Dados carregados da nuvem ✓';
+      return;
+    }
+  } catch (e) {}
+  loadLocal();
+}
+
+function loadLocal() {
+  try {
+    const s = localStorage.getItem(LOCAL_KEY);
+    if (s) {
+      applyData(JSON.parse(s));
+      el('status').textContent = 'Dados carregados localmente (offline)';
+    }
+  } catch (e) {}
+  checkOnline();
+}
+
+function applyData(d) {
+  COINS.forEach(c => {
+    if (d[c.sym]) {
+      if (d[c.sym].q != null) c.q = d[c.sym].q;
+      if (d[c.sym].m != null) c.m = d[c.sym].m;
+      if (d[c.sym].w != null) c.w = d[c.sym].w;
+    }
+  });
+  COINS.forEach(c => {
+    if (d[c.sym]) {
+      const q = el('q_' + c.sym);
+      const m = el('m_' + c.sym);
+      const w = el('w_' + c.sym);
+      if (q && d[c.sym].q != null) q.value = d[c.sym].q;
+      if (m && d[c.sym].m != null) m.value = d[c.sym].m;
+      if (w && d[c.sym].w != null) w.value = d[c.sym].w;
+    }
+  });
+  if (d.cfg?.aporte != null) el('aporte').value = d.cfg.aporte;
+  buildChips();
+  update();
+}
+
+async function saveToCloud(payload) {
+  if (!isOnline) return false;
+  try {
+    const { error } = await supabase
+      .from('plano_crypto')
+      .upsert({ user_id: userId, data: payload, updated_at: new Date().toISOString() });
+    if (!error) {
+      updateSyncBadge();
+      return true;
+    }
+  } catch (e) {}
+  isOnline = false;
+  updateSyncBadge();
+  return false;
+}
+
+function saveLocal(payload) {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function buildPayload() {
+  const d = { cfg: { aporte: el('aporte').value } };
+  COINS.forEach(c => {
+    d[c.sym] = {
+      q: el('q_' + c.sym).value,
+      m: el('m_' + c.sym).value,
+      w: el('w_' + c.sym).value
+    };
+  });
+  return d;
+}
+
+async function save() {
+  const payload = buildPayload();
+  const cloudOk = await saveToCloud(payload);
+  const localOk = saveLocal(payload);
+  if (cloudOk) {
+    el('status').textContent = 'Guardado na nuvem ☁️ ' + new Date().toLocaleTimeString('pt-PT');
+  } else if (localOk) {
+    el('status').textContent = 'Guardado localmente (offline) 💾 ' + new Date().toLocaleTimeString('pt-PT');
+  } else {
+    el('status').textContent = 'Erro a gravar!';
+  }
+}
+
+function buildCoins() {
+  const box = el('coins'); box.innerHTML = '';
+  COINS.forEach(c => {
+    const card = document.createElement('div'); card.className = 'coin';
+    card.innerHTML =
+      '<div class="top">'
+      + '<img class="logo" src="' + c.icon + '" alt="' + c.sym + '" onerror="this.style.display=\'none\';var d=this.nextElementSibling;if(d)d.style.display=\'flex\';">'
+      + '<div class="dot" style="background:' + c.color + ';color:' + c.fg + '">' + c.sym[0] + '</div>'
+      + '<div><div class="sym">' + c.sym + '</div><div class="name">' + c.name + '</div></div>'
+      + '<div class="winp"><label>Alvo %</label><input id="w_' + c.sym + '" inputmode="decimal" value="' + c.w + '"></div>'
+      + '</div>'
+      + '<div class="fields">'
+      + '<div><label>Tens (qtd)</label><input id="q_' + c.sym + '" inputmode="decimal" placeholder="0"></div>'
+      + '<div><label>Preço live</label><div class="price" id="p_' + c.sym + '">—</div></div>'
+      + '<div><label>Preço manual €</label><input id="m_' + c.sym + '" inputmode="decimal" placeholder="off"></div>'
+      + '<div><label>Valor atual</label><div class="price" id="v_' + c.sym + '">—</div></div>'
+      + '</div>'
+      + '<div class="buychip" id="chip_' + c.sym + '">'
+      + '<div><div class="lbl">A COMPRAR</div><div class="amt"><span id="b_' + c.sym + '">—</span><span class="qty" id="bq_' + c.sym + '"></span></div></div>'
+      + '<div style="text-align:right"><div class="lbl">ALVO</div><div class="amt" id="a_' + c.sym + '" style="color:var(--txt);font-size:14px">—</div></div>'
+      + '</div>'
+      + '<div class="qtdbuy" id="n_' + c.sym + '"></div>';
+    box.appendChild(card);
+    ['q_' + c.sym, 'm_' + c.sym, 'w_' + c.sym].forEach(id => el(id).addEventListener('input', () => { update(); save(); }));
+  });
+  ['aporte'].forEach(id => el(id).addEventListener('input', () => { update(); save(); }));
+}
+
+function buildChips() {
+  el('chips').innerHTML = COINS.map(c => '<span class="chip" style="border-color:' + c.color + '66"><span style="color:' + c.color + '">●</span> ' + c.sym + ' <b id="chipw_' + c.sym + '">—</b></span>').join('');
+}
+
+function effPrice(c) {
+  const m = num(el('m_' + c.sym).value);
+  if (m > 0) return { p: m, manual: true };
+  const r = price[c.sym];
+  return r ? { p: r.p, manual: false } : null;
+}
+
+async function refresh() {
+  el('status').textContent = 'A atualizar preços…';
+  const ids = COINS.map(c => c.cg).join(',');
+  let got = false, src = '';
+  try {
+    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=' + ids + '&vs_currencies=eur');
+    const j = await r.json(); let all = true;
+    COINS.forEach(c => { const v = j[c.cg] && j[c.cg].eur; if (v > 0) { price[c.sym] = { p: v }; } else all = false; });
+    if (all) { got = true; src = 'CoinGecko'; }
+  } catch (e) {}
+  if (!got) {
+    try {
+      const pair = 'XXBTZEUR,XETHZEUR,SOLEUR,LINKEUR,AAVEEUR,ARBEUR';
+      const r = await fetch('https://api.kraken.com/0/public/Ticker?pair=' + encodeURIComponent(pair));
+      const j = await r.json(); const res = j.result || {}; let all = true;
+      COINS.forEach(c => {
+        let p = null;
+        for (const k in res) {
+          let base = k.endsWith('ZEUR') ? k.slice(0, -4) : k.slice(0, -3);
+          if (base.length > 3 && base[0] === 'X') base = base.slice(1);
+          if (c.kr.indexOf(base) >= 0) { const v = parseFloat(res[k].c[0]); if (v > 0) { p = v; break; } }
+        }
+        if (p > 0) { price[c.sym] = { p }; } else all = false;
+      });
+      if (all) { got = true; src = 'Kraken'; }
+    } catch (e) {}
+  }
+  lastOk = new Date();
+  update();
+  el('status').textContent = got ? ('Fonte: ' + src + ' · atualizado às ' + lastOk.toLocaleTimeString('pt-PT')) : 'FALHA nas duas fontes — preços podem estar desatualizados. Usa o campo "Preço manual €".';
+  checkOnline();
+}
+
+function update() {
+  let totVal = 0;
+  COINS.forEach(c => {
+    const q = num(el('q_' + c.sym).value); const ep = effPrice(c);
+    const v = q * (ep ? ep.p : 0); totVal += v;
+    el('p_' + c.sym).textContent = ep ? (fmt(ep.p, ep.p < 1 ? 4 : 2) + (ep.manual ? ' (m)' : '')) : '—';
+    el('v_' + c.sym).textContent = fmt(v);
+    const cw = el('chipw_' + c.sym); if (cw) cw.textContent = fmt0(num(el('w_' + c.sym).value)) + '%';
+  });
+  let sumW = 0; COINS.forEach(c => { sumW += num(el('w_' + c.sym).value); });
+  const wsum = el('wsum');
+  if (Math.abs(sumW - 100) > 0.01) { wsum.style.display = 'block'; wsum.textContent = '⚠️ Os pesos somam ' + fmt0(sumW) + '% — devem somar 100%.'; }
+  else { wsum.style.display = 'none'; }
+  const aporte = num(el('aporte').value);
+  const total = totVal + aporte;
+  let sumD = 0; const gap = {};
+  COINS.forEach(c => {
+    const w = num(el('w_' + c.sym).value); const a = total * w / 100;
+    const ep = effPrice(c); const v = num(el('q_' + c.sym).value) * (ep ? ep.p : 0);
+    gap[c.sym] = Math.max(0, a - v); sumD += gap[c.sym];
+    el('a_' + c.sym).textContent = fmt(a);
+  });
+  let totBuy = 0;
+  COINS.forEach(c => {
+    const ep = effPrice(c);
+    const d = gap[c.sym];
+    const buy = (aporte > 0 && sumD > 0) ? aporte * d / sumD : 0;
+    const chip = el('chip_' + c.sym);
+    if (buy > 0.005) { el('b_' + c.sym).textContent = fmt(buy); chip.classList.remove('zero'); totBuy += buy;
+      el('bq_' + c.sym).textContent = ep ? (' ' + fmt(buy / ep.p, ep.p < 1 ? 2 : 6) + ' ' + c.sym) : '';
+      el('n_' + c.sym).textContent = d > 0.005 ? ('desvio p/ meta: ' + fmt(d)) : 'em linha com a meta'; }
+    else { el('b_' + c.sym).textContent = 'nada hoje'; chip.classList.add('zero'); el('bq_' + c.sym).textContent = '';
+      el('n_' + c.sym).textContent = d > 0.005 ? ('desvio p/ meta: ' + fmt(d)) : 'em linha com a meta'; }
+  });
+  el('tVal').textContent = fmt(totVal); el('tAlvo').textContent = fmt(total); el('tBuy').textContent = fmt(totBuy);
+}
+
+buildCoins();
+initAuth();
+el('btnRefresh').addEventListener('click', refresh);
+el('btnSave').addEventListener('click', save);
+window.addEventListener('pagehide', save);
+el('auto').addEventListener('change', () => { if (el('auto').checked) start(); else clearInterval(timer); });
+let timer = null;
+function start() { if (timer) clearInterval(timer); timer = setInterval(() => { if (el('auto').checked) refresh(); }, 60000); }
+
+// PWA manifest
+try {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="#0b1020"/><circle cx="96" cy="96" r="58" fill="none" stroke="#22d3ee" stroke-width="10"/><path d="M96 52v88" stroke="#8b5cf6" stroke-width="10" stroke-linecap="round"/><path d="M70 96h52" stroke="#34d399" stroke-width="10" stroke-linecap="round"/></svg>';
+  const icon = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  const mf = { name: 'Plano Crypto', short_name: 'Plano Crypto', start_url: location.href.split('#')[0], scope: './', display: 'standalone', background_color: '#0b1020', theme_color: '#0b1020', icons: [{ src: icon, sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] };
+  const lk = document.createElement('link'); lk.rel = 'manifest'; lk.href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(mf)); document.head.appendChild(lk);
+} catch (e) {}
+
+refresh(); start();
 </script>
 </body>
 </html>
