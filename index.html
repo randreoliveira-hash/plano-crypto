@@ -16,13 +16,11 @@
   .chip{font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
   h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:0 0 10px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr)}}
   label{font-size:11px;color:var(--mut);display:block;margin:0 0 4px}
   input{width:100%;background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:11px;font-size:16px}
   input:focus{outline:none;border-color:var(--acc)}
   button{min-height:44px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:10px 16px;font-size:14px;cursor:pointer}
-  button.acc{background:linear-gradient(90deg,#6d5efc,#22d3ee);border:none;color:#08101f;font-weight:700}
+  button:disabled{opacity:.5}
   button.green{background:linear-gradient(90deg,#34d399,#22d3ee);border:none;color:#08101f;font-weight:800;box-shadow:0 4px 16px rgba(52,211,153,.3)}
   .rowbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
   .rowbtns label{display:flex;gap:7px;align-items:center;color:var(--txt);font-size:13px;background:rgba(255,255,255,.04);border:1px solid var(--line);padding:9px 11px;border-radius:10px;min-height:44px;margin:0}
@@ -61,6 +59,9 @@
   .note code{background:rgba(255,255,255,.07);padding:1px 4px;border-radius:4px}
   .sync-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(34,211,238,.15);color:var(--acc);border:1px solid rgba(34,211,238,.3)}
   .sync-badge.off{background:rgba(251,113,133,.15);color:var(--bad);border-color:rgba(251,113,133,.3)}
+  .lock{position:fixed;inset:0;background:rgba(11,16,32,.97);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+  .lock .card{width:100%;max-width:340px;text-align:center;margin:0}
+  .pinin{text-align:center;font-size:24px;letter-spacing:10px;font-weight:700}
 </style>
 </head>
 <body>
@@ -94,20 +95,30 @@
   <div class="warn" id="wsum" style="display:none;margin-top:9px"></div>
   <div class="note">
     • "A COMPRAR" = repartição do aporte de hoje pelos desvios até às metas — a soma é sempre igual ao aporte (nunca gasta mais do que o aporte). Se ficares acima da meta numa moeda, ela não recebe compra (a app nunca te diz para vender).<br>
-    • Quantidades e pesos ficam guardados neste navegador (localStorage) e, quando há ligação, também na nuvem (Supabase).<br>
+    • Tudo fica guardado na base de dados, não neste navegador. Para veres os mesmos dados noutro aparelho, entra com o mesmo PIN de 4 dígitos. Sem ligação à internet não é possível gravar.<br>
     • Fontes: CoinGecko <code>api.coingecko.com</code> e Kraken <code>api.kraken.com/0/public/Ticker</code> (públicas, sem chave). Dados podem atrasar e diferem do preço de execução na exchange.<br>
     • Fisco (PT): plano todo cripto→cripto não tributa no momento; declarar operações no anexo G1 (Portal das Finanças).<br>
     • Isto não é aconselhamento financeiro. As decisões e as ordens são tuas.
   </div>
 </div>
 
+<div class="lock" id="lock">
+  <div class="card">
+    <h2 id="lockTitle" style="text-align:center">Entrar</h2>
+    <div id="lockSub" style="color:var(--mut);font-size:12.5px;margin-bottom:12px">A ligar à base de dados…</div>
+    <input id="pin1" class="pinin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="····">
+    <div id="pin2wrap" style="display:none;margin-top:10px"><input id="pin2" class="pinin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="····"></div>
+    <div class="rowbtns" style="justify-content:center;margin-top:14px"><button class="green" id="btnPin">Entrar</button></div>
+    <div id="lockMsg" style="color:var(--warn);font-size:12.5px;margin-top:12px;min-height:16px"></div>
+  </div>
+</div>
+
 <script>
-// ===== Nuvem (Supabase) =====
-// Uma única linha ('principal') partilhada por todos os aparelhos, sem login.
-// A chave "publishable" é pública por desenho; as regras RLS só deixam mexer nessa linha.
+// ===== Base de dados (Supabase) =====
+// Tudo fica numa única linha ('principal'), acedida só através de funções que exigem o PIN.
+// A chave "publishable" é pública por desenho: sem PIN, as funções não devolvem nem gravam nada.
 const SB_URL='https://gzarjkhmohaxrgpxzuqy.supabase.co';
 const SB_KEY='sb_publishable_9uHmY3N2IL7QVP1qDECYOQ_fv1ySM_r';
-const PLANO_ID='principal';
 const sb=(window.supabase&&window.supabase.createClient)?window.supabase.createClient(SB_URL,SB_KEY):null;
 
 // ===== Dados (original) =====
@@ -119,26 +130,24 @@ const COINS=[
  {sym:'AAVE',name:'Aave',     cg:'aave',     kr:['AAVE'],         w:10, color:'#c86cc0', fg:'#ffffff', icon:'https://coin-images.coingecko.com/coins/images/12645/small/aave-token-round.png?1720472354'},
  {sym:'ARB', name:'Arbitrum', cg:'arbitrum', kr:['ARB'],          w:10, color:'#37a5f5', fg:'#07202f', icon:'https://coin-images.coingecko.com/coins/images/16547/small/arb.jpg?1721358242'}
 ];
-const KEY='planoCryptoV1';
+const OLD_KEY='planoCryptoV1';   // só para migrar, uma vez, dados antigos deste browser
 let price={};
 let lastOk=null;
 let timer=null;
-let pushTimer=null;
-let pendingCloud=false;
-const cloud={uid:null};
+let PIN=null;            // só em memória: o PIN é pedido sempre que a página abre
+let saveTimer=null;
+let pendingSave=false;
+let lockMode='unlock';
 
 function el(id){return document.getElementById(id)}
 function num(v){return parseFloat(String(v).replace(',','.'))||0}
 function fmt(n,d){if(!isFinite(n))return '—';return n.toLocaleString('pt-PT',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})+' €'}
 function fmt0(n){return n.toLocaleString('pt-PT',{maximumFractionDigits:2})}
 function hora(){return new Date().toLocaleTimeString('pt-PT')}
+function setBadge(on){const b=el('syncBadge');b.textContent=on?'online ☁️':'sem ligação ⚠️';b.classList.toggle('off',!on);}
 
-// ===== Armazenamento local (original: localStorage, com cookie de recurso) =====
-function dataSave(json){try{localStorage.setItem(KEY,json);return true;}catch(e){try{document.cookie=KEY+'='+encodeURIComponent(json)+';max-age=31536000;path=/';return true;}catch(e2){return false;}}}
-function dataLoad(){try{const s=localStorage.getItem(KEY);if(s)return s;}catch(e){}try{const m=document.cookie.match(new RegExp('(?:^|; )'+KEY+'=([^;]*)'));if(m)return decodeURIComponent(m[1]);}catch(e){}return null;}
-function readLocal(){try{const s=dataLoad();return s?JSON.parse(s):null;}catch(e){return null;}}
 function buildData(){
-  const d={cfg:{aporte:el('aporte').value},ts:Date.now()};
+  const d={cfg:{aporte:el('aporte').value}};
   COINS.forEach(c=>{d[c.sym]={q:el('q_'+c.sym).value,m:el('m_'+c.sym).value,w:el('w_'+c.sym).value};});
   return d;
 }
@@ -152,70 +161,99 @@ function applyData(d){
   });
   if(d.cfg&&d.cfg.aporte!=null)el('aporte').value=d.cfg.aporte;
 }
-// Chamado a cada alteração feita pelo utilizador: grava já no aparelho e agenda envio para a nuvem
-function save(){
-  const ok=dataSave(JSON.stringify(buildData()));
-  pendingCloud=true;
-  clearTimeout(pushTimer);
-  pushTimer=setTimeout(()=>cloudPush(),1500);
-  return ok;
-}
-// Ao sair da página, envia o que ainda não foi para a nuvem
-function flush(){
-  if(!pendingCloud)return;
-  dataSave(JSON.stringify(buildData()));
-  clearTimeout(pushTimer);
-  cloudPush();
-}
 
-// ===== Nuvem: sincronização em segundo plano (nunca bloqueia a app) =====
-function setBadge(on){
-  const b=el('syncBadge');
-  b.textContent=on?'online ☁️':'offline 💾';
-  b.classList.toggle('off',!on);
-}
-async function cloudPush(d){
-  if(!cloud.uid)return false;
+// ===== Gravação: sempre na base de dados =====
+async function gravar(){
+  if(!sb||!PIN)return false;
+  clearTimeout(saveTimer);
   try{
-    const payload=d||buildData();
-    const {error}=await sb.from('plano_crypto').upsert({user_id:cloud.uid,data:payload,updated_at:new Date().toISOString()});
+    const {data,error}=await sb.rpc('plano_gravar',{p_pin:PIN,p_data:buildData()});
     if(error)throw error;
-    pendingCloud=false;
+    if(!data||data.status!=='OK')throw new Error('estado: '+(data&&data.status));
+    pendingSave=false;
     setBadge(true);
     return true;
   }catch(e){
-    console.warn('Nuvem: gravação falhou',e);
+    console.warn('Não gravou:',e);
+    pendingSave=true;
     setBadge(false);
     return false;
   }
 }
-async function cloudPull(){
-  const {data,error}=await sb.from('plano_crypto').select('data').eq('user_id',cloud.uid).maybeSingle();
-  if(error)throw error;
-  const remote=data&&data.data?data.data:null;
-  const local=readLocal();
-  if(remote&&(!local||(remote.ts||0)>(local.ts||0))){
-    // a nuvem tem dados mais recentes: aplica-os neste aparelho
-    applyData(remote);
-    update();
-    dataSave(JSON.stringify(remote));
-    el('status').textContent='Carregado da nuvem ☁️ '+hora();
-  }else if(local){
-    // este aparelho tem os dados mais recentes (ou a nuvem está vazia): envia-os
-    await cloudPush(local);
-  }
+function save(){
+  pendingSave=true;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(gravar,1500);
 }
-async function cloudInit(){
-  if(!sb){setBadge(false);return;}
-  try{
-    cloud.uid=PLANO_ID;   // a mesma linha para todos os aparelhos: sem login
-    await cloudPull();
-    setBadge(true);
-  }catch(e){
-    console.warn('Nuvem indisponível:',e);
-    cloud.uid=null;
-    setBadge(false);
+function flush(){if(pendingSave)gravar();}
+
+// ===== Migração única: dados antigos deste browser =====
+function apagarLocal(){
+  try{localStorage.removeItem(OLD_KEY);localStorage.removeItem('anon_id');}catch(e){}
+  try{document.cookie=OLD_KEY+'=;max-age=0;path=/';}catch(e){}
+}
+async function migrarLocal(){
+  let antigo=null;
+  try{const s=localStorage.getItem(OLD_KEY);if(s)antigo=JSON.parse(s);}catch(e){}
+  if(!antigo){apagarLocal();return;}
+  applyData(antigo);
+  // só apaga o local depois de a base de dados confirmar a gravação
+  if(await gravar())apagarLocal();
+}
+
+// ===== PIN =====
+function lockMsg(t){el('lockMsg').textContent=t;}
+function lockShow(mode){
+  lockMode=mode;
+  const criar=mode==='create';
+  el('lockTitle').textContent=criar?'Criar PIN':'Entrar';
+  el('lockSub').textContent=criar?'Escolhe um PIN de 4 dígitos. Vai ser pedido em todos os aparelhos.':'Escreve o teu PIN de 4 dígitos.';
+  el('pin2wrap').style.display=criar?'block':'none';
+  el('btnPin').textContent=criar?'Criar':'Entrar';
+  el('pin1').value='';el('pin2').value='';
+  lockMsg('');
+  el('pin1').focus();
+}
+function lockBloqueado(seg){
+  el('btnPin').disabled=true;
+  lockMsg('Bloqueado por tentativas erradas. Tenta daqui a '+Math.ceil(seg/60)+' min.');
+  setTimeout(()=>{el('btnPin').disabled=false;lockMsg('');},seg*1000);
+}
+async function lockStart(){
+  if(!sb){lockShow('unlock');lockMsg('Sem ligação à base de dados.');return;}
+  const {data,error}=await sb.rpc('plano_status');
+  if(error||!data){lockShow('unlock');lockMsg('Sem ligação à base de dados. Recarrega a página.');return;}
+  if(!data.tem_pin){lockShow('create');return;}
+  lockShow('unlock');
+  if(data.bloqueado_segundos>0)lockBloqueado(data.bloqueado_segundos);
+}
+async function lockSubmit(){
+  const p=el('pin1').value.trim();
+  if(!/^[0-9]{4}$/.test(p)){lockMsg('O PIN tem de ter exatamente 4 dígitos.');return;}
+  if(lockMode==='create'){
+    if(p!==el('pin2').value.trim()){lockMsg('Os dois PIN não coincidem.');return;}
+    const {data,error}=await sb.rpc('plano_definir_pin',{p_pin:p});
+    if(error){lockMsg('Sem ligação à base de dados.');return;}
+    if(data!=='OK'){lockMsg('Já existe um PIN. Recarrega a página e entra com ele.');return;}
   }
+  await abrirCom(p);
+}
+async function abrirCom(p){
+  const {data,error}=await sb.rpc('plano_ler',{p_pin:p});
+  if(error){lockMsg('Sem ligação à base de dados.');return;}
+  if(data.status==='OK'){
+    PIN=p;
+    if(data.data){applyData(data.data);apagarLocal();}
+    else{await migrarLocal();}
+    update();
+    el('lock').style.display='none';
+    setBadge(true);
+    el('status').textContent='Dados carregados ☁️ '+hora();
+    return;
+  }
+  if(data.status==='PIN_ERRADO'){lockMsg('PIN errado.');el('pin1').value='';el('pin1').focus();return;}
+  if(String(data.status).indexOf('BLOQUEADO:')===0){lockBloqueado(Number(String(data.status).split(':')[1]));return;}
+  lockMsg('Não foi possível entrar ('+data.status+').');
 }
 
 // ===== Interface (original) =====
@@ -325,19 +363,16 @@ function start(){if(timer)clearInterval(timer);timer=setInterval(()=>{if(el('aut
 
 // ===== Arranque =====
 buildCoins();
-applyData(readLocal());   // carrega o que estava guardado neste aparelho
 buildChips();
 update();
 el('btnRefresh').addEventListener('click',refresh);
-el('btnSave').addEventListener('click',()=>{
-  const ok=save();
-  const msg=ok?('Dados gravados neste dispositivo às '+hora()+' ✓'):'Gravação bloqueada (modo privado/preview) — os dados só ficam nesta sessão.';
-  el('status').textContent=msg;
-  if(cloud.uid)cloudPush().then(good=>{el('status').textContent=msg+(good?' · nuvem ☁️':' · nuvem indisponível');});
-});
+el('btnSave').addEventListener('click',async()=>{const ok=await gravar();el('status').textContent=ok?('Gravado ☁️ '+hora()):'Não gravado: verifica a ligação.';});
+el('auto').addEventListener('change',()=>{if(el('auto').checked)start();else clearInterval(timer);});
+el('btnPin').addEventListener('click',lockSubmit);
+el('pin1').addEventListener('keydown',e=>{if(e.key==='Enter')lockSubmit();});
+el('pin2').addEventListener('keydown',e=>{if(e.key==='Enter')lockSubmit();});
 window.addEventListener('pagehide',flush);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush();});
-el('auto').addEventListener('change',()=>{if(el('auto').checked)start();else clearInterval(timer);});
 
 // Instalável como app (manifesto gerado em runtime, original)
 try{
@@ -349,8 +384,7 @@ try{
 
 refresh();
 start();
-cloudInit();
-setInterval(()=>{if(!cloud.uid)cloudInit();},60000);
+lockStart();
 </script>
 </body>
 </html>
