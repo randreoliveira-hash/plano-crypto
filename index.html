@@ -183,12 +183,23 @@ function applyData(d){
 // ===== Gravação: só com o botão Guardar =====
 // Só grava depois de ler a base de dados nesta sessão (um ecrã vazio nunca apaga dados existentes)
 // e só quando o utilizador carrega em Guardar.
+// Fiat/Stable e hora da leitura automática vêm sempre do servidor, nunca de uma página aberta há muito tempo
+function atualizarLeituraAutomatica(cfg){
+  if(!cfg)return;
+  if(cfg.din!=null)KFIAT=cfg.din;
+  if(cfg.din_eur!=null||cfg.din_stb!=null)KDET={eur:cfg.din_eur??null,stb:cfg.din_stb??null};
+  if(cfg.kraken_hora!=null)KHORA=cfg.kraken_hora;
+}
 async function gravar(p,forcar){
   const pin=p||PIN;
   if(!sb||!pin||!LOADED)return false;
   if(!DIRTY&&!forcar)return true;
   setBadge(true,'a gravar…');
   try{
+    const {data:atual,error:erroLer}=await sb.rpc('plano_ler',{p_pin:pin});
+    if(erroLer)throw erroLer;
+    if(!atual||atual.status!=='OK')throw new Error('leitura: '+(atual&&atual.status));
+    if(atual.data)atualizarLeituraAutomatica(atual.data.cfg);
     const {data,error}=await sb.rpc('plano_gravar',{p_pin:pin,p_data:buildData()});
     if(error)throw error;
     if(!data||data.status!=='OK')throw new Error('estado: '+(data&&data.status));
