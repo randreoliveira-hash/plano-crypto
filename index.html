@@ -49,6 +49,8 @@
   .buychip .amt{font-size:17px;font-weight:800;color:var(--ok)}
   .buychip.zero .amt{color:var(--mut);font-weight:600;font-size:14px}
   .qtdbuy{font-size:11px;color:var(--mut);margin-top:6px;min-height:14px}
+  .cpbtn{margin-top:6px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;border:1px solid rgba(52,211,153,.55);background:rgba(52,211,153,.12);color:var(--ok);cursor:pointer}
+  .cpbtn.ok{background:var(--ok);color:#06241a}
   .summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
   @media(min-width:700px){.summary{grid-template-columns:repeat(3,1fr)}}
   .sum{background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:12px;padding:10px}
@@ -320,6 +322,13 @@ async function abrirCom(p){
 }
 
 // ===== Interface (original) =====
+const COPIAR={};   // texto exato a copiar para a Kraken (quantidade a comprar em cada posição)
+function copiarTexto(t,btn){
+  const fim=()=>{const antes=btn.textContent;btn.textContent='copiado ✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent=antes;btn.classList.remove('ok');},1500);};
+  const alternativa=()=>{const ta=document.createElement('textarea');ta.value=t;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy');}catch(e){}document.body.removeChild(ta);if(ok)fim();else btn.textContent='não copiou';};
+  if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(fim).catch(alternativa);}
+  else alternativa();
+}
 function buildCoins(){
   const box=el('coins');box.innerHTML='';
   COINS.forEach(c=>{
@@ -338,12 +347,13 @@ function buildCoins(){
       +'<div><label>Valor atual</label><div class="price" id="v_'+c.sym+'">—</div></div>'
       +'</div>'
       +'<div class="buychip" id="chip_'+c.sym+'">'
-      +'<div><div class="lbl">A COMPRAR</div><div class="amt"><span id="b_'+c.sym+'">—</span><span class="qty" id="bq_'+c.sym+'"></span></div></div>'
+      +'<div><div class="lbl">A COMPRAR</div><div class="amt"><span id="b_'+c.sym+'">—</span><span class="qty" id="bq_'+c.sym+'"></span></div><button type="button" class="cpbtn" id="cp_'+c.sym+'" hidden>copiar qtd</button></div>'
       +'<div style="text-align:right"><div class="lbl">ALVO</div><div class="amt" id="a_'+c.sym+'" style="color:var(--txt);font-size:14px">—</div></div>'
       +'</div>'
       +'<div class="qtdbuy" id="n_'+c.sym+'"></div>';
     box.appendChild(card);
     ['q_'+c.sym,'m_'+c.sym,'w_'+c.sym].forEach(id=>el(id).addEventListener('input',()=>{update();save();}));
+    el('cp_'+c.sym).addEventListener('click',function(){copiarTexto(COPIAR[c.sym]||'',this);});
   });
   ['aporte'].forEach(id=>el(id).addEventListener('input',()=>{update();save();}));
 }
@@ -416,9 +426,12 @@ function update(){
     const buy=(aporte>0&&sumD>0)?aporte*d/sumD:0;
     const chip=el('chip_'+c.sym);
     if(buy>0.005){el('b_'+c.sym).textContent=fmt(buy);chip.classList.remove('zero');totBuy+=buy;
-      el('bq_'+c.sym).textContent=ep?(' '+fmt(buy/ep.p,ep.p<1?2:6)+' '+c.sym):'';
+      const qd=ep?buy/ep.p:0, dq=(ep&&ep.p<1)?2:6;
+      el('bq_'+c.sym).textContent=ep?(' '+qd.toLocaleString('pt-PT',{minimumFractionDigits:dq,maximumFractionDigits:dq})+' '+c.sym):'';
+      COPIAR[c.sym]=ep?qd.toFixed(dq).replace('.',','):'';
+      el('cp_'+c.sym).hidden=!ep;
       el('n_'+c.sym).textContent=d>0.005?('desvio p/ meta: '+fmt(d)):'em linha com a meta';}
-    else{el('b_'+c.sym).textContent='nada hoje';chip.classList.add('zero');el('bq_'+c.sym).textContent='';
+    else{el('b_'+c.sym).textContent='nada hoje';chip.classList.add('zero');el('bq_'+c.sym).textContent='';COPIAR[c.sym]='';el('cp_'+c.sym).hidden=true;
       el('n_'+c.sym).textContent=d>0.005?('desvio p/ meta: '+fmt(d)):'em linha com a meta';}
   });
   el('tVal').textContent=fmt(totVal);el('tAlvo').textContent=fmt(total);el('tBuy').textContent=fmt(totBuy);
