@@ -95,7 +95,7 @@
   <div class="warn" id="wsum" style="display:none;margin-top:9px"></div>
   <div class="note">
     • "A COMPRAR" = repartição do aporte de hoje pelos desvios até às metas — a soma é sempre igual ao aporte (nunca gasta mais do que o aporte). Se ficares acima da meta numa moeda, ela não recebe compra (a app nunca te diz para vender).<br>
-    • Tudo fica guardado na base de dados, não neste navegador. Para veres os mesmos dados noutro aparelho, entra com o mesmo PIN de 4 dígitos. Sem ligação à internet não é possível gravar.<br>
+    • Tudo fica guardado na base de dados, não neste navegador. Para veres os mesmos dados noutro aparelho, entra com o mesmo PIN de 4 dígitos. Sem ligação à internet não é possível gravar; o estado da gravação aparece no topo da página.<br>
     • Fontes: CoinGecko <code>api.coingecko.com</code> e Kraken <code>api.kraken.com/0/public/Ticker</code> (públicas, sem chave). Dados podem atrasar e diferem do preço de execução na exchange.<br>
     • Fisco (PT): plano todo cripto→cripto não tributa no momento; declarar operações no anexo G1 (Portal das Finanças).<br>
     • Isto não é aconselhamento financeiro. As decisões e as ordens são tuas.
@@ -138,13 +138,16 @@ let PIN=null;            // só em memória: o PIN é pedido sempre que a págin
 let saveTimer=null;
 let pendingSave=false;
 let lockMode='unlock';
+let LOADED=false;   // só grava depois de ler a base de dados nesta sessão
+let DIRTY=false;    // há alterações no ecrã por gravar
+let retryTimer=null;
 
 function el(id){return document.getElementById(id)}
 function num(v){return parseFloat(String(v).replace(',','.'))||0}
 function fmt(n,d){if(!isFinite(n))return '—';return n.toLocaleString('pt-PT',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})+' €'}
 function fmt0(n){return n.toLocaleString('pt-PT',{maximumFractionDigits:2})}
 function hora(){return new Date().toLocaleTimeString('pt-PT')}
-function setBadge(on){const b=el('syncBadge');b.textContent=on?'online ☁️':'sem ligação ⚠️';b.classList.toggle('off',!on);}
+function setBadge(on,txt){const b=el('syncBadge');b.textContent=txt||(on?'online ☁️':'sem ligação ⚠️');b.classList.toggle('off',!on);}
 
 function buildData(){
   const d={cfg:{aporte:el('aporte').value}};
@@ -163,29 +166,36 @@ function applyData(d){
 }
 
 // ===== Gravação: sempre na base de dados =====
-async function gravar(p){
+// Só grava depois de ler a base de dados nesta sessão (um ecrã vazio nunca apaga dados existentes)
+// e só quando há alterações feitas no ecrã.
+async function gravar(p,forcar){
   const pin=p||PIN;
-  if(!sb||!pin)return false;
+  if(!sb||!pin||!LOADED)return false;
+  if(!DIRTY&&!forcar)return true;
   clearTimeout(saveTimer);
+  setBadge(true,'a gravar…');
   try{
     const {data,error}=await sb.rpc('plano_gravar',{p_pin:pin,p_data:buildData()});
     if(error)throw error;
     if(!data||data.status!=='OK')throw new Error('estado: '+(data&&data.status));
-    pendingSave=false;
-    setBadge(true);
+    DIRTY=false;
+    clearTimeout(retryTimer);
+    setBadge(true,'gravado ☁️ '+hora());
     return true;
   }catch(e){
     console.warn('Não gravou:',e);
-    pendingSave=true;
-    setBadge(false);
+    setBadge(false,'não gravado ⚠️ — tento de novo');
+    clearTimeout(retryTimer);
+    retryTimer=setTimeout(()=>{if(PIN&&DIRTY)gravar();},10000);
     return false;
   }
 }
 function save(){
-  pendingSave=true;
+  DIRTY=true;
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(gravar,1500);
+  saveTimer=setTimeout(()=>gravar(),500);
 }
+
 // ===== Ao sair (ou mudar de app): grava o que faltar, apaga cookies e dados locais e volta a pedir o PIN =====
 function apagarCookies(){
   try{
@@ -206,14 +216,17 @@ function limparEcra(){
 function sair(){
   if(!PIN)return;
   const p=PIN;
-  if(pendingSave)gravar(p);   // envia o que faltava antes de limpar
+  if(LOADED&&DIRTY)gravar(p);   // envia o que falta antes de limpar (a chamada começa já, antes de limpar)
   PIN=null;
+  LOADED=false;
+  DIRTY=false;
+  clearTimeout(saveTimer);
+  clearTimeout(retryTimer);
   apagarLocal();
   limparEcra();
   lockShow('unlock');
   el('lock').style.display='flex';
 }
-
 // ===== Migração única: dados antigos deste browser =====
 function apagarLocal(){
   try{Object.keys(localStorage).forEach(k=>{if(k===OLD_KEY||k==='anon_id'||k.indexOf('sb-')===0)localStorage.removeItem(k);});}catch(e){}
@@ -222,8 +235,9 @@ function apagarLocal(){
 async function migrarLocal(){
   let antigo=null;
   try{const s=localStorage.getItem(OLD_KEY);if(s)antigo=JSON.parse(s);}catch(e){}
-  if(!antigo){apagarLocal();return;}
+  if(!antigo){apagarLocal();DIRTY=false;return;}
   applyData(antigo);
+  DIRTY=true;
   // só apaga o local depois de a base de dados confirmar a gravação
   if(await gravar())apagarLocal();
 }
@@ -270,12 +284,12 @@ async function abrirCom(p){
   if(error){lockMsg('Sem ligação à base de dados.');return;}
   if(data.status==='OK'){
     PIN=p;
-    if(data.data){applyData(data.data);apagarLocal();}
-    else{await migrarLocal();}
+    LOADED=true;   // a partir daqui já se pode gravar
+    if(data.data){applyData(data.data);apagarLocal();DIRTY=false;}
+    else{await migrarLocal();}   // só migra dados antigos se a base de dados estiver vazia
     update();
     el('lock').style.display='none';
-    setBadge(true);
-    el('status').textContent='Dados carregados ☁️ '+hora();
+    setBadge(true,'carregado ☁️ '+hora());
     return;
   }
   if(data.status==='PIN_ERRADO'){lockMsg('PIN errado.');el('pin1').value='';el('pin1').focus();return;}
@@ -393,13 +407,13 @@ buildCoins();
 buildChips();
 update();
 el('btnRefresh').addEventListener('click',refresh);
-el('btnSave').addEventListener('click',async()=>{const ok=await gravar();el('status').textContent=ok?('Gravado ☁️ '+hora()):'Não gravado: verifica a ligação.';});
+el('btnSave').addEventListener('click',()=>gravar(null,true));
 el('auto').addEventListener('change',()=>{if(el('auto').checked)start();else clearInterval(timer);});
 el('btnPin').addEventListener('click',lockSubmit);
 el('pin1').addEventListener('keydown',e=>{if(e.key==='Enter')lockSubmit();});
 el('pin2').addEventListener('keydown',e=>{if(e.key==='Enter')lockSubmit();});
 window.addEventListener('pagehide',sair);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')sair();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')sair();else if(PIN&&DIRTY)gravar();});
 
 // Instalável como app (manifesto gerado em runtime, original)
 try{
