@@ -95,7 +95,7 @@
   <div class="warn" id="wsum" style="display:none;margin-top:9px"></div>
   <div class="note">
     • "A COMPRAR" = repartição do aporte de hoje pelos desvios até às metas — a soma é sempre igual ao aporte (nunca gasta mais do que o aporte). Se ficares acima da meta numa moeda, ela não recebe compra (a app nunca te diz para vender).<br>
-    • Tudo fica guardado na base de dados, não neste navegador. Para veres os mesmos dados noutro aparelho, entra com o mesmo PIN de 4 dígitos. Sem ligação à internet não é possível gravar; o estado da gravação aparece no topo da página.<br>
+    • Os dados só ficam gravados quando carregas em Guardar; se fechares a página sem guardar, as alterações perdem-se. Para veres os mesmos dados noutro aparelho, entra com o mesmo PIN de 4 dígitos. Sem ligação à internet não é possível gravar; o estado da gravação aparece no topo da página.<br>
     • Fontes: CoinGecko <code>api.coingecko.com</code> e Kraken <code>api.kraken.com/0/public/Ticker</code> (públicas, sem chave). Dados podem atrasar e diferem do preço de execução na exchange.<br>
     • Fisco (PT): plano todo cripto→cripto não tributa no momento; declarar operações no anexo G1 (Portal das Finanças).<br>
     • Isto não é aconselhamento financeiro. As decisões e as ordens são tuas.
@@ -165,35 +165,31 @@ function applyData(d){
   if(d.cfg&&d.cfg.aporte!=null)el('aporte').value=d.cfg.aporte;
 }
 
-// ===== Gravação: sempre na base de dados =====
+// ===== Gravação: só com o botão Guardar =====
 // Só grava depois de ler a base de dados nesta sessão (um ecrã vazio nunca apaga dados existentes)
-// e só quando há alterações feitas no ecrã.
+// e só quando o utilizador carrega em Guardar.
 async function gravar(p,forcar){
   const pin=p||PIN;
   if(!sb||!pin||!LOADED)return false;
   if(!DIRTY&&!forcar)return true;
-  clearTimeout(saveTimer);
   setBadge(true,'a gravar…');
   try{
     const {data,error}=await sb.rpc('plano_gravar',{p_pin:pin,p_data:buildData()});
     if(error)throw error;
     if(!data||data.status!=='OK')throw new Error('estado: '+(data&&data.status));
     DIRTY=false;
-    clearTimeout(retryTimer);
     setBadge(true,'gravado ☁️ '+hora());
     return true;
   }catch(e){
     console.warn('Não gravou:',e);
-    setBadge(false,'não gravado ⚠️ — tento de novo');
-    clearTimeout(retryTimer);
-    retryTimer=setTimeout(()=>{if(PIN&&DIRTY)gravar();},10000);
+    setBadge(false,'não gravado ⚠️ — carrega em Guardar outra vez');
     return false;
   }
 }
+// Qualquer alteração no ecrã fica só marcada como "por guardar"; nada é enviado sem o botão Guardar.
 function save(){
   DIRTY=true;
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>gravar(),500);
+  setBadge(true,'alterações por guardar ✏️');
 }
 
 // ===== Ao sair (ou mudar de app): grava o que faltar, apaga cookies e dados locais e volta a pedir o PIN =====
@@ -215,18 +211,14 @@ function limparEcra(){
 }
 function sair(){
   if(!PIN)return;
-  const p=PIN;
-  if(LOADED&&DIRTY)gravar(p);   // envia o que falta antes de limpar (a chamada começa já, antes de limpar)
+  // Não grava nada: as alterações por guardar ficam no ecrã até voltares com o PIN.
   PIN=null;
-  LOADED=false;
-  DIRTY=false;
-  clearTimeout(saveTimer);
-  clearTimeout(retryTimer);
   apagarLocal();
-  limparEcra();
+  if(!DIRTY)limparEcra();
   lockShow('unlock');
   el('lock').style.display='flex';
 }
+
 // ===== Migração única: dados antigos deste browser =====
 function apagarLocal(){
   try{Object.keys(localStorage).forEach(k=>{if(k===OLD_KEY||k==='anon_id'||k.indexOf('sb-')===0)localStorage.removeItem(k);});}catch(e){}
@@ -283,13 +275,17 @@ async function abrirCom(p){
   const {data,error}=await sb.rpc('plano_ler',{p_pin:p});
   if(error){lockMsg('Sem ligação à base de dados.');return;}
   if(data.status==='OK'){
+    const tinhaAlteracoes=DIRTY;   // alterações por guardar feitas antes de bloquear não se perdem
     PIN=p;
-    LOADED=true;   // a partir daqui já se pode gravar
-    if(data.data){applyData(data.data);apagarLocal();DIRTY=false;}
-    else{await migrarLocal();}   // só migra dados antigos se a base de dados estiver vazia
+    LOADED=true;
+    if(!tinhaAlteracoes){
+      if(data.data){applyData(data.data);apagarLocal();}
+      else{await migrarLocal();}   // só migra dados antigos se a base de dados estiver vazia
+    }
     update();
     el('lock').style.display='none';
-    setBadge(true,'carregado ☁️ '+hora());
+    if(tinhaAlteracoes)setBadge(true,'alterações por guardar ✏️');
+    else setBadge(true,'carregado ☁️ '+hora());
     return;
   }
   if(data.status==='PIN_ERRADO'){lockMsg('PIN errado.');el('pin1').value='';el('pin1').focus();return;}
@@ -413,7 +409,7 @@ el('btnPin').addEventListener('click',lockSubmit);
 el('pin1').addEventListener('keydown',e=>{if(e.key==='Enter')lockSubmit();});
 el('pin2').addEventListener('keydown',e=>{if(e.key==='Enter')lockSubmit();});
 window.addEventListener('pagehide',sair);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')sair();else if(PIN&&DIRTY)gravar();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')sair();});
 
 // Instalável como app (manifesto gerado em runtime, original)
 try{
