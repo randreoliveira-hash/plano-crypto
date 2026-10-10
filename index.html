@@ -103,9 +103,11 @@
 
 <script>
 // ===== Nuvem (Supabase) =====
-// A chave "publishable" é pública por desenho: a proteção dos dados vem das regras RLS da base de dados.
+// Uma única linha ('principal') partilhada por todos os aparelhos, sem login.
+// A chave "publishable" é pública por desenho; as regras RLS só deixam mexer nessa linha.
 const SB_URL='https://gzarjkhmohaxrgpxzuqy.supabase.co';
 const SB_KEY='sb_publishable_9uHmY3N2IL7QVP1qDECYOQ_fv1ySM_r';
+const PLANO_ID='principal';
 const sb=(window.supabase&&window.supabase.createClient)?window.supabase.createClient(SB_URL,SB_KEY):null;
 
 // ===== Dados (original) =====
@@ -206,15 +208,7 @@ async function cloudPull(){
 async function cloudInit(){
   if(!sb){setBadge(false);return;}
   try{
-    const {data:{session}}=await sb.auth.getSession();
-    let user=session&&session.user;
-    if(!user){
-      // cada aparelho ganha uma identidade anónima própria (sem email nem password)
-      const r=await sb.auth.signInAnonymously();
-      if(r.error)throw r.error;
-      user=r.data.user;
-    }
-    cloud.uid=user.id;
+    cloud.uid=PLANO_ID;   // a mesma linha para todos os aparelhos: sem login
     await cloudPull();
     setBadge(true);
   }catch(e){
