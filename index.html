@@ -68,6 +68,12 @@
 <h1>Plano Crypto</h1>
 <div style="margin:-4px 0 10px"><span id="syncBadge" class="sync-badge off">a ligar…</span></div>
 <div class="sub">Compras por metas com preços ao vivo. Sem chaves, sem contas — nunca insiras chaves de API ou seeds aqui.</div>
+<div class="summary" style="grid-template-columns:repeat(3,1fr);margin:0 0 6px">
+  <div class="sum"><div class="k">Cripto</div><div class="v" id="t_cripto">—</div></div>
+  <div class="sum"><div class="k">Dinheiro</div><div class="v" id="t_din">—</div></div>
+  <div class="sum"><div class="k">Total</div><div class="v" id="t_total" style="color:var(--ok)">—</div></div>
+</div>
+<div class="note" id="t_sub" style="margin:0 0 14px;border-top:none;padding-top:0;text-align:center">—</div>
 <div class="chips" id="chips"></div>
 
 <div class="card">
@@ -86,6 +92,7 @@
 
 <div class="card">
   <h2>Carteira &amp; compras</h2>
+  <div style="margin:0 0 12px"><label>Dinheiro: EUR + stables (€)</label><input id="din" inputmode="decimal" placeholder="0,00"></div>
   <div class="coins" id="coins"></div>
   <div class="summary">
     <div class="sum"><div class="k">Valor atual</div><div class="v" id="tVal">—</div></div>
@@ -95,8 +102,8 @@
   <div class="warn" id="wsum" style="display:none;margin-top:9px"></div>
   <div class="note">
     • "A COMPRAR" = repartição do aporte de hoje pelos desvios até às metas — a soma é sempre igual ao aporte (nunca gasta mais do que o aporte). Se ficares acima da meta numa moeda, ela não recebe compra (a app nunca te diz para vender).<br>
-    • Os dados só ficam gravados quando carregas em Guardar; se fechares a página sem guardar, as alterações perdem-se. Para veres os mesmos dados noutro aparelho, entra com o mesmo PIN de 4 dígitos. Sem ligação à internet não é possível gravar; o estado da gravação aparece no topo da página.<br>
-    • Fontes: CoinGecko <code>api.coingecko.com</code> e Kraken <code>api.kraken.com/0/public/Ticker</code> (públicas, sem chave). Dados podem atrasar e diferem do preço de execução na exchange.<br>
+    • Quantidades e dinheiro vêm da Kraken de 30 em 30 minutos. Se editares à mão, carrega em Guardar; se fechares a página sem guardar, as alterações perdem-se. Para veres os mesmos dados noutro aparelho, entra com o mesmo PIN de 4 dígitos. Sem ligação à internet não é possível gravar; o estado da gravação aparece no topo da página.<br>
+    • Preços: Kraken <code>api.kraken.com/0/public/Ticker</code> (pública, sem chave); CoinGecko só se a Kraken falhar. Dados podem atrasar e diferem do preço de execução na exchange.<br>
     • Fisco (PT): plano todo cripto→cripto não tributa no momento; declarar operações no anexo G1 (Portal das Finanças).<br>
     • Isto não é aconselhamento financeiro. As decisões e as ordens são tuas.
   </div>
@@ -149,8 +156,9 @@ function fmt0(n){return n.toLocaleString('pt-PT',{maximumFractionDigits:2})}
 function hora(){return new Date().toLocaleTimeString('pt-PT')}
 function setBadge(on,txt){const b=el('syncBadge');b.textContent=txt||(on?'online ☁️':'sem ligação ⚠️');b.classList.toggle('off',!on);}
 
+let KHORA=null;   // hora da última leitura automática da Kraken (vem dos dados guardados)
 function buildData(){
-  const d={cfg:{aporte:el('aporte').value}};
+  const d={cfg:{aporte:el('aporte').value,din:el('din').value,kraken_hora:KHORA}};
   COINS.forEach(c=>{d[c.sym]={q:el('q_'+c.sym).value,m:el('m_'+c.sym).value,w:el('w_'+c.sym).value};});
   return d;
 }
@@ -162,7 +170,11 @@ function applyData(d){
     if(x.m!=null)el('m_'+c.sym).value=x.m;
     if(x.w!=null)el('w_'+c.sym).value=x.w;
   });
-  if(d.cfg&&d.cfg.aporte!=null)el('aporte').value=d.cfg.aporte;
+  if(d.cfg){
+    if(d.cfg.aporte!=null)el('aporte').value=d.cfg.aporte;
+    if(d.cfg.din!=null)el('din').value=d.cfg.din;
+    if(d.cfg.kraken_hora!=null)KHORA=d.cfg.kraken_hora;
+  }
 }
 
 // ===== Gravação: só com o botão Guardar =====
@@ -319,7 +331,7 @@ function buildCoins(){
     box.appendChild(card);
     ['q_'+c.sym,'m_'+c.sym,'w_'+c.sym].forEach(id=>el(id).addEventListener('input',()=>{update();save();}));
   });
-  ['aporte'].forEach(id=>el(id).addEventListener('input',()=>{update();save();}));
+  ['aporte','din'].forEach(id=>el(id).addEventListener('input',()=>{update();save();}));
 }
 function buildChips(){
   el('chips').innerHTML=COINS.map(c=>'<span class="chip" style="border-color:'+c.color+'66"><span style="color:'+c.color+'">●</span> '+c.sym+' <b id="chipw_'+c.sym+'">—</b></span>').join('');
@@ -328,29 +340,31 @@ function effPrice(c){const m=num(el('m_'+c.sym).value);if(m>0)return {p:m,manual
 
 async function refresh(){
   el('status').textContent='A atualizar preços…';
-  const ids=COINS.map(c=>c.cg).join(',');
   let got=false, src='';
+  // 1.º: Kraken (pública, sem chave)
   try{
-    const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids='+ids+'&vs_currencies=eur');
-    const j=await r.json();let all=true;
-    COINS.forEach(c=>{const v=j[c.cg]&&j[c.cg].eur;if(v>0){price[c.sym]={p:v};}else all=false;});
-    if(all){got=true;src='CoinGecko';}
+    const pair='XXBTZEUR,XETHZEUR,SOLEUR,LINKEUR,AAVEEUR,ARBEUR';
+    const r=await fetch('https://api.kraken.com/0/public/Ticker?pair='+encodeURIComponent(pair));
+    const j=await r.json();const res=j.result||{};let all=true;
+    COINS.forEach(c=>{
+      let p=null;
+      for(const k in res){
+        let base=k.endsWith('ZEUR')?k.slice(0,-4):k.slice(0,-3);
+        if(base.length>3&&base[0]==='X')base=base.slice(1);
+        if(c.kr.indexOf(base)>=0){const v=parseFloat(res[k].c[0]);if(v>0){p=v;break;}}
+      }
+      if(p>0){price[c.sym]={p};}else all=false;
+    });
+    if(all){got=true;src='Kraken';}
   }catch(e){}
+  // 2.º: CoinGecko, só se a Kraken falhar
   if(!got){
     try{
-      const pair='XXBTZEUR,XETHZEUR,SOLEUR,LINKEUR,AAVEEUR,ARBEUR';
-      const r=await fetch('https://api.kraken.com/0/public/Ticker?pair='+encodeURIComponent(pair));
-      const j=await r.json();const res=j.result||{};let all=true;
-      COINS.forEach(c=>{
-        let p=null;
-        for(const k in res){
-          let base=k.endsWith('ZEUR')?k.slice(0,-4):k.slice(0,-3);
-          if(base.length>3&&base[0]==='X')base=base.slice(1);
-          if(c.kr.indexOf(base)>=0){const v=parseFloat(res[k].c[0]);if(v>0){p=v;break;}}
-        }
-        if(p>0){price[c.sym]={p};}else all=false;
-      });
-      if(all){got=true;src='Kraken';}
+      const ids=COINS.map(c=>c.cg).join(',');
+      const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids='+ids+'&vs_currencies=eur');
+      const j=await r.json();let all=true;
+      COINS.forEach(c=>{const v=j[c.cg]&&j[c.cg].eur;if(v>0){price[c.sym]={p:v};}else all=false;});
+      if(all){got=true;src='CoinGecko';}
     }catch(e){}
   }
   lastOk=new Date();
@@ -394,6 +408,11 @@ function update(){
       el('n_'+c.sym).textContent=d>0.005?('desvio p/ meta: '+fmt(d)):'em linha com a meta';}
   });
   el('tVal').textContent=fmt(totVal);el('tAlvo').textContent=fmt(total);el('tBuy').textContent=fmt(totBuy);
+  const dinEur=num(el('din').value);
+  el('t_cripto').textContent=fmt(totVal);
+  el('t_din').textContent=fmt(dinEur);
+  el('t_total').textContent=fmt(totVal+dinEur);
+  el('t_sub').textContent=KHORA?('Quantidades e dinheiro lidos na Kraken às '+KHORA+' · preços da Kraken ao vivo'):'Quantidades e dinheiro: manuais até à primeira leitura automática';
 }
 
 function start(){if(timer)clearInterval(timer);timer=setInterval(()=>{if(el('auto').checked)refresh();},60000);}
