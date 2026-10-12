@@ -10,14 +10,15 @@
   *{box-sizing:border-box;font-family:system-ui,'Segoe UI',Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
   html,body{margin:0}
   body{background:radial-gradient(1100px 500px at 85% -10%,#1e2a5a 0%,transparent 60%),linear-gradient(160deg,var(--bg0),var(--bg1));color:var(--txt);padding:12px;font-size:15px;min-height:100vh}
-  h1{font-size:20px;margin:10px auto 14px;color:#fff;text-align:center;display:table;background:rgba(17,26,51,.75);
-     border:1px solid var(--line);border-radius:12px;padding:8px 18px;letter-spacing:.06em;box-shadow:0 4px 18px rgba(0,0,0,.25)}
-  .sub{color:var(--mut);font-size:12.5px;line-height:1.5;margin-bottom:12px}
-  .chips{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:14px;padding-bottom:2px}
+  h1{font-size:20px;margin:0;color:#fff;text-align:center;letter-spacing:.08em;
+     background:rgba(10,16,34,.92);border-bottom:1px solid var(--line);padding:14px 8px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
+  #syncBadge{display:block;text-align:center;margin:8px auto 0}
+  .sub{color:var(--mut);font-size:12.5px;line-height:1.5;margin-bottom:12px;text-align:center}
+  .chips{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:14px;padding-bottom:2px;justify-content:center}
   .chip{font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt);flex:none}
   @media(max-width:480px){
-    .chips{gap:2px}
-    .chip{font-size:9.5px;padding:3px 3px}
+    .chips{gap:3px}
+    .chip{font-size:10.5px;padding:3px 5px}
     .chip .chipdot{display:none}
   }
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
@@ -38,11 +39,11 @@
 
   /* MCI (Macro Confluence Index) bar */
   .mciwrap{max-width:440px;margin:0 auto 12px;text-align:center;position:relative}
-  .mciHead{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 6px}
-  .infobtn{width:22px;height:22px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
-           font-weight:900;font-size:12px;line-height:1;background:rgba(255,255,255,.06);border:1px solid var(--line);
-           color:var(--txt);padding:0;cursor:pointer;opacity:.9}
-  .infobtn:hover,.infobtn:active{opacity:1}
+  .mciHead{display:flex;align-items:flex-start;justify-content:center;gap:10px;margin:0 0 6px}
+  .infobtn{width:18px;height:18px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+           font-weight:700;font-size:11px;line-height:1;background:transparent;border:1px solid var(--mut);
+           color:var(--mut);padding:0;cursor:pointer;opacity:.8}
+  .infobtn:hover,.infobtn:active{opacity:1;color:var(--txt);border-color:var(--txt)}
   .infopop{position:absolute;left:50%;transform:translateX(-50%);top:28px;
            width:min(380px,calc(100% - 24px));z-index:30;
            background:rgba(0,0,0,.55);border:1px solid var(--line);border-radius:14px;padding:10px 12px;
@@ -125,14 +126,14 @@
           <div class="apl" style="margin:0">MCI (Macro Confluence Index)</div>
           <div style="color:var(--mut);font-size:11px;margin-top:2px">• momento macro do bitcoin •</div>
         </div>
-        <button type="button" class="infobtn" id="mciInfo" aria-label="Legenda do MCI" style="align-self:flex-start;visibility:hidden">i</button>
+        <button type="button" class="infobtn" id="mciInfo" aria-label="Legenda do MCI" style="align-self:flex-start">i</button>
       </div>
       <div class="infopop" id="mciCompPop" hidden>
         <div class="infotitle">Componentes e ponderações</div>
-        <div class="inforow"><span class="swatch" style="background:#6d5efc"></span><div><b>50%</b> — MVRV Z-Score (4 anos)</div></div>
-        <div class="inforow"><span class="swatch" style="background:#22d3ee"></span><div><b>10%</b> — RSI semanal (4 anos)</div></div>
-        <div class="inforow"><span class="swatch" style="background:#8b5cf6"></span><div><b>20%</b> — Fear &amp; Greed (1 ano)</div></div>
-        <div class="inforow"><span class="swatch" style="background:#34d399"></span><div><b>20%</b> — Puell Multiple (4 anos)</div></div>
+        <div class="inforow"><div><b>50%</b> — MVRV Z-Score (4 anos)</div></div>
+        <div class="inforow"><div><b>10%</b> — RSI semanal (4 anos)</div></div>
+        <div class="inforow"><div><b>20%</b> — Fear &amp; Greed (1 ano)</div></div>
+        <div class="inforow"><div><b>20%</b> — Puell Multiple (4 anos)</div></div>
         <div class="infomut">Cada indicador é convertido em percentil da própria história antes de ser combinado. Se faltar um, os pesos dos restantes renormalizam.</div>
       </div>
       <div class="infopop" id="mciLegend" hidden>

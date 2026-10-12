@@ -63,6 +63,13 @@ Estes avisos não compram nada. Pedem uma revisão do plano.
 Termómetro macro do BTC, escala de 0 a 100. Não é sinal de compra/venda: serve para calibrar a agressividade dos aportes.
 
 - **Componentes** (cada um convertido em percentil da própria história): MVRV Z-Score (4 anos), RSI semanal (4 anos), Fear & Greed (1 ano) e Puell Multiple (4 anos).
+- **Fórmula:**
+
+```
+p   = 0.50·p_MVRVZ(4a) + 0.10·p_RSI_1W(4a) + 0.20·p_FG(1a) + 0.20·p_Puell(4a)
+MCI = 100 · p^α / ( p^α + (1−p)^α ),  α = 2.0
+```
+
 - **Combinação ponderada:** 50% MVRV Z, 10% RSI, 20% Fear & Greed, 20% Puell. Se faltar um componente, os pesos dos restantes renormalizam.
 - **Contraste:** o valor combinado é "esticado" para os extremos (alfa = 2.0) — o índice encosta mais a 0/100 quando há confluência, sem ficar binário.
 - **Escala:**
