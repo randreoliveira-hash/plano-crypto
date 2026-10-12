@@ -1,0 +1,36 @@
+//@version=5
+// BMP — Bitcoin Momentum Pulse (versão VISUAL para mesclar com o MCI)
+// Em vez de colunas, usa: fundo colorido suave + triângulos no topo do painel.
+// Assim o MCI fica sempre legível por cima, e o pulso vê-se num relance.
+// 🟢 Positivo | ⚪ Neutro | 🔴 Negativo
+
+indicator("BMP visual", shorttitle="BMP", overlay=false, max_bars_back=500, format=format.price, precision=0)
+
+ma50 = ta.sma(close, 50)
+tendOK = close > ma50
+mom20 = close / close[20] - 1
+momOK = mom20 > 0
+hashRate = request.security("GLASSNODE:BTC_HASHRATE", "", close, lookahead=barmerge.lookahead_off)
+h14 = ta.sma(hashRate, 14)
+h30 = ta.sma(hashRate, 30)
+capRecente = ta.barssince(h14 < h30) < 90
+hrRecup = h14 > h30 and capRecente
+hrAtivo = ta.barssince(hrRecup) < 45
+votosPos = (tendOK ? 1 : 0) + (momOK ? 1 : 0) + (hrAtivo ? 1 : 0)
+positivo = votosPos >= 2
+negativo = not tendOK and not momOK and not hrAtivo
+sinalVal = positivo ? 1 : negativo ? -1 : 0
+corSinal = positivo ? color.new(color.green, 0) : negativo ? color.new(color.red, 0) : color.new(color.white, 0)
+
+// fundo suave do pulso
+bgcolor(color.new(corSinal, 82), title="Fundo BMP")
+
+// marcador triangular no topo do painel (visível em qualquer escala)
+plotshape(positivo, title="Positivo", style=shape.triangleup, location=location.top, color=color.new(color.green, 20), size=size.tiny)
+plotshape(negativo, title="Negativo", style=shape.triangledown, location=location.top, color=color.new(color.red, 20), size=size.tiny)
+
+// série invisível para a janela de dados (mostra +1/0/-1 em qualquer barra)
+plot(sinalVal, "BMP", display=display.data_window)
+
+alertcondition(sinalVal == 1 and sinalVal[1] != 1, "BMP Positivo", "POS")
+alertcondition(sinalVal == -1 and sinalVal[1] != -1, "BMP Negativo", "NEG")
