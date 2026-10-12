@@ -21,8 +21,8 @@ hrAtivo = ta.barssince(hrRecup) < 45
 votosPos = (tendOK ? 1 : 0) + (momOK ? 1 : 0) + (hrAtivo ? 1 : 0)
 sinalVal = votosPos >= 2 ? 1 : -1
 corSinal = sinalVal == 1 ? color.green : color.red
-plot(sinalVal, "BMP", color=corSinal, linewidth=1, style=plot.style_columns)
-hline(0, "Neutro", color=color.white, linestyle=hline.style_dashed)
-bgcolor(color.new(corSinal, 70))
+plot(sinalVal, "BMP", color=color.new(corSinal, 40), linewidth=1, style=plot.style_areabra)
+hline(0, "Neutro", color=color.new(color.white, 60), linestyle=hline.style_dashed)
+bgcolor(color.new(corSinal, 88))
 alertcondition(sinalVal == 1 and sinalVal[1] != 1, "BMP Positivo", "POS")
 alertcondition(sinalVal == -1 and sinalVal[1] != -1, "BMP Negativo", "NEG")
