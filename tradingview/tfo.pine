@@ -1,53 +1,52 @@
 //@version=5
-// TFO (Trend / Flow Oscillator) — indicador de timing, sem valuação.
-// Responde só a: "a tendência virou?" e "há dinheiro real a entrar?"
-// Regime baseado em: MA200 (tendência) + OBV (fluxo, confirmado em 21 dias).
-// Use em gráfico DIÁRIO do BTC. Par perfeito com o MCI do bot (a dose vem de lá):
-//   TFO "ACUMULAÇÃO SILENCIOSA" + bot avisa MCI <30  -> fasear reforços
-//   TFO "VIRAGEM"               + bot avisa MCI <30  -> reforço máximo
+// TFO v3 — MOMENTO: POSITIVO / NEUTRO / NEGATIVO (sem valuação, só momentum)
+// A dose vem do MCI (bot). O TFO responde só a: "o movimento está a virar?"
+//
+// Lógica (testada nos fundos e topos históricos):
+//   POSITIVO (+1): momentum de 60d positivo e a melhorar, OU hashrate recuperou
+//                  da capitulação (mineração), OU tendência+momentum saudáveis
+//   NEGATIVO  (-1): tendência para baixo + momentum para baixo, sem sinal de viragem
+//   NEUTRO    ( 0): tudo o resto (subida tranquila, transições)
+// Dados: nativos do TV + GLASSNODE:BTC_HASHRATE (real). Zero valuação.
 
-indicator("TFO (Trend-Flow Oscillator)", shorttitle="TFO", overlay=false, max_bars_back=500)
+indicator("TFO v3 — Momento (Positivo/Neutro/Negativo)", shorttitle="TFO", overlay=false, max_bars_back=500)
 
 // ===== Tendência =====
 ma200  = ta.sma(close, 200)
 tendOK = close > ma200
-crossUp = ta.crossover(close, ma200)
 
-// ===== Fluxo (OBV) =====
-obv    = ta.obv
-obvOK  = obv > obv[21]     // fluxo positivo nas últimas ~3 semanas
-obvBad = obv < obv[21]     // fluxo a sair
+// ===== Momentum 60d =====
+mom60  = close / close[60] - 1
+momOK  = mom60 > 0
+momBetter = mom60 > mom60[7]
 
-// ===== Estados =====
-// 4 = VIRAGEM (cruzamento fresco da MA200 com fluxo a confirmar)
-// 3 = ACUMULAÇÃO SILENCIOSA (abaixo da MA200 mas OBV a subir)
-// 2 = MARCHA (acima da MA200, fluxo a confirmar)
-// 1 = AVISO (acima da MA200 mas OBV a divergir)
-// 0 = FORA (abaixo da MA200, OBV a cair)
-viragem  = crossUp and obvOK
-acumula  = not tendOK and obvOK
-marcha   = tendOK and obvOK
-aviso    = tendOK and not obvOK
-fora     = not tendOK and not obvOK
+// ===== Hash Ribbon (capitulação de mineradores) =====
+// MA30 vs MA60 do hashrate real; capitulação = MA30 < MA60; recuperação = cruza acima depois
+h30 = ta.sma(request.security("GLASSNODE:BTC_HASHRATE", "", close, lookahead=barmerge.lookahead_off), 30)
+h60 = ta.sma(request.security("GLASSNODE:BTC_HASHRATE", "", close, lookahead=barmerge.lookahead_off), 60)
+var bool capAtiva = false
+if h30 < h60
+    capAtiva := true
+if h30 > h60 and capAtiva
+    capAtiva := false
+hrRecup = h30 > h60 and capAtiva[1] and not capAtiva[0]
 
-estadoVal = viragem ? 4 : acumula ? 3 : marcha ? 2 : aviso ? 1 : 0
-estadoTxt = viragem ? "VIRAGEM" : acumula ? "ACUMULAÇÃO SILENCIOSA" : marcha ? "MARCHA" : aviso ? "AVISO" : "FORA"
-corEstado = viragem ? #22c55e : acumula ? #eab308 : marcha ? #3b82f6 : aviso ? #f97316 : #ef4444
+// ===== MOMENTO =====
+positivo = (momOK and momBetter) or hrRecup or (tendOK and momOK)
+negativo = not tendOK and not momOK and not momBetter and not hrRecup
+momentoVal = positivo ? 1 : negativo ? -1 : 0
+momentoTxt = positivo ? "POSITIVO" : negativo ? "NEGATIVO" : "NEUTRO"
+corMomento = positivo ? #22c55e : negativo ? #ef4444 : #9ca3af
 
 // ===== Visual =====
-// linha de regime 0-4 (útil na janela de dados; o gráfico visual vem da cor)
-plot(estadoVal, "Regime", color=corEstado, linewidth=3)
-bgcolor(color.new(corEstado, 90))
-
-// MA200 no próprio painel como referência 0-200
-hline(100, "MA200 (preço acima)", color=#888888, linestyle=hline.style_dotted)
+plot(momentoVal, "Momento", color=corMomento, linewidth=3, style=plot.style_columns)
+hline(0, "Neutro", color=#888888, linestyle=hline.style_dashed)
+bgcolor(color.new(corMomento, 88))
 
 var label lbl = na
 if barstate.islast
-    lbl := label.new(bar_index, estadoVal, estadoTxt, style=label.style_label_left, color=corEstado, textcolor=color.white, size=size.normal)
+    lbl := label.new(bar_index, momentoVal, "Momento: " + momentoTxt, style=label.style_label_left, color=corMomento, textcolor=color.white, size=size.normal)
 
 // ===== Alertas =====
-alertcondition(viragem, "TFO: VIRAGEM", "TFO VIRAGEM: preço cruzou acima da MA200 com fluxo (OBV) a confirmar. Com MCI frio do bot = reforço máximo.")
-alertcondition(acumula and not acumula[1], "TFO: ACUMULAÇÃO SILENCIOSA", "TFO ACUMULAÇÃO SILENCIOSA: OBV a subir enquanto o preço ainda está abaixo da MA200. Preparar reforços faseados.")
-alertcondition(aviso and not aviso[1], "TFO: AVISO", "TFO AVISO: preço acima da MA200 mas OBV em divergência. Fluxo já não confirma.")
-alertcondition(fora and not fora[1], "TFO: FORA", "TFO FORA: tendência de baixa com fluxo a sair. Sem reforços.")
+alertcondition(momentoVal == 1 and momentoVal[1] != 1, "TFO: Momento POSITIVO", "TFO: momento virou POSITIVO. Com MCI frio do bot = COMPRAR.")
+alertcondition(momentoVal == -1 and momentoVal[1] != -1, "TFO: Momento NEGATIVO", "TFO: momento virou NEGATIVO. Reforços pausados.")
