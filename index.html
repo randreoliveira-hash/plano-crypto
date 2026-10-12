@@ -31,7 +31,22 @@
   .aporte{font-size:20px;text-align:center;padding:13px;font-weight:800;border-radius:14px;background:linear-gradient(90deg,rgba(109,94,252,.12),rgba(34,211,238,.10));border:1px solid rgba(34,211,238,.45)}
 
   /* MCI (Macro Confluence Index) bar */
-  .mciwrap{max-width:440px;margin:0 auto 12px;text-align:center}
+  .mciwrap{max-width:440px;margin:0 auto 12px;text-align:center;position:relative}
+  .mciHead{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 6px}
+  .infobtn{width:22px;height:22px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+           font-weight:900;font-size:12px;line-height:1;background:rgba(255,255,255,.06);border:1px solid var(--line);
+           color:var(--txt);padding:0;cursor:pointer;opacity:.9}
+  .infobtn:hover,.infobtn:active{opacity:1}
+  .infopop{position:absolute;left:50%;transform:translateX(-50%);top:28px;
+           width:min(380px,calc(100% - 24px));z-index:30;
+           background:rgba(0,0,0,.55);border:1px solid var(--line);border-radius:14px;padding:10px 12px;
+           text-align:left;box-shadow:0 10px 30px rgba(0,0,0,.35);backdrop-filter:blur(8px)}
+  .infopop[hidden]{display:none}
+  .infotitle{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em;font-weight:800;margin:0 0 6px}
+  .inforow{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--txt);margin:6px 0;line-height:1.35}
+  .swatch{width:10px;height:10px;border-radius:3px;flex:none;margin-top:3px}
+  .infomut{color:var(--mut);font-size:11.5px;line-height:1.45;margin-top:8px}
+
   .mciScale{display:flex;justify-content:space-between;color:var(--mut);font-size:11px;margin:0 2px 6px}
   .mciBar{position:relative;height:12px;border-radius:999px;border:1px solid var(--line);
           background:linear-gradient(90deg,#2563eb 0%,#22d3ee 35%,#fbbf24 70%,#ef4444 100%);
@@ -98,7 +113,19 @@
   <h2 style="text-align:center">Compra de hoje</h2>
   <div class="aportewrap">
     <div class="mciwrap">
-      <div class="apl" style="margin:0 0 6px">MCI (momento macro do BTC)</div>
+      <div class="mciHead">
+        <div class="apl" style="margin:0">MCI (momento macro do BTC)</div>
+        <button type="button" class="infobtn" id="mciInfo" aria-label="Legenda do MCI">i</button>
+      </div>
+      <div class="infopop" id="mciLegend" hidden>
+        <div class="infotitle">Legenda (0–100)</div>
+        <div class="inforow"><span class="swatch" style="background:#2563eb"></span><div><b>0–20</b> frio — acumulação</div></div>
+        <div class="inforow"><span class="swatch" style="background:#22d3ee"></span><div><b>20–40</b> frio/neutro</div></div>
+        <div class="inforow"><span class="swatch" style="background:#a3e635"></span><div><b>40–60</b> neutro</div></div>
+        <div class="inforow"><span class="swatch" style="background:#fbbf24"></span><div><b>60–80</b> quente — risco a subir</div></div>
+        <div class="inforow"><span class="swatch" style="background:#ef4444"></span><div><b>80–100</b> muito quente — cautela com reforços</div></div>
+        <div class="infomut">O MCI é um termómetro macro. Não é sinal automático de compra/venda.</div>
+      </div>
       <div class="mciScale"><span>0</span><span>100</span></div>
       <div class="mciBar" aria-label="MCI 0 a 100">
         <div class="mciLbl" id="mciVal">—</div>
@@ -660,6 +687,23 @@ buildChips();
 update();
 el('btnRefresh').addEventListener('click',refresh);
 el('btnSave').addEventListener('click',()=>gravar(null,true));
+
+// MCI legenda (botão i)
+if(el('mciInfo')&&el('mciLegend')){
+  el('mciInfo').addEventListener('click',e=>{
+    e.stopPropagation();
+    const pop=el('mciLegend');
+    if(pop.hasAttribute('hidden')) pop.removeAttribute('hidden');
+    else pop.setAttribute('hidden','');
+  });
+  document.addEventListener('click',e=>{
+    const pop=el('mciLegend');
+    if(!pop||pop.hasAttribute('hidden'))return;
+    if(pop.contains(e.target)||el('mciInfo').contains(e.target))return;
+    pop.setAttribute('hidden','');
+  });
+}
+
 el('auto').addEventListener('change',()=>{if(el('auto').checked)start();else clearInterval(timer);});
 el('btnPin').addEventListener('click',lockSubmit);
 el('pin1').addEventListener('keydown',e=>{if(e.key==='Enter')lockSubmit();});
