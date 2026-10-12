@@ -138,12 +138,14 @@
       </div>
       <div class="infopop" id="mciLegend" hidden>
         <div class="infotitle">Legenda (0–100)</div>
-        <div class="inforow"><span class="swatch" style="background:#2563eb"></span><div><b>0–20</b> frio — acumulação</div></div>
-        <div class="inforow"><span class="swatch" style="background:#22d3ee"></span><div><b>20–40</b> frio/neutro — recuperação</div></div>
-        <div class="inforow"><span class="swatch" style="background:#34d399"></span><div><b>40–60</b> neutro — equilíbrio</div></div>
-        <div class="inforow"><span class="swatch" style="background:#fbbf24"></span><div><b>60–80</b> aquecido — risco a subir</div></div>
-        <div class="inforow"><span class="swatch" style="background:#ef4444"></span><div><b>80–100</b> muito aquecido — cautela com reforços</div></div>
-        <div class="infomut">O MCI é um termómetro macro (não é sinal automático de compra/venda).</div>
+        <div class="inforow"><span class="swatch" style="background:#1d4ed8"></span><div><b>0–5</b> capitulação extrema — reforço máximo (big dip)</div></div>
+        <div class="inforow"><span class="swatch" style="background:#2563eb"></span><div><b>5–10</b> capitulação — reforço agressivo</div></div>
+        <div class="inforow"><span class="swatch" style="background:#22d3ee"></span><div><b>10–30</b> acumulação — reforços pequenos e faseados</div></div>
+        <div class="inforow"><span class="swatch" style="background:#34d399"></span><div><b>30–70</b> neutro — DCA normal</div></div>
+        <div class="inforow"><span class="swatch" style="background:#fbbf24"></span><div><b>70–90</b> aquecido — sem reforços; construir caixa</div></div>
+        <div class="inforow"><span class="swatch" style="background:#f97316"></span><div><b>90–98</b> alerta máximo — zero reforços</div></div>
+        <div class="inforow"><span class="swatch" style="background:#ef4444"></span><div><b>98–100</b> euforia — realização faseada de lucros</div></div>
+        <div class="infomut">O MCI é um termómetro macro (não é sinal automático de compra/venda). Para decisões de aporte, usa a média de 7 dias.</div>
       </div>
       <div class="mciScale"><span>0</span><span>100</span></div>
       <div class="mciBar" aria-label="MCI 0 a 100">
@@ -451,11 +453,13 @@ function percentil(valores,x){const arr=valores.filter(v=>v!=null&&isFinite(v)).
 function contraste(p,alpha){p=clamp(p,1e-6,1-1e-6);const ap=Math.pow(p,alpha),bp=Math.pow(1-p,alpha);return 100*ap/(ap+bp);}
 
 function zonaMCI(x){
-  if(x<=20) return {nome:'frio', faixa:'0–20', desc:'acumulação'};
-  if(x<40)  return {nome:'frio/neutro', faixa:'20–40', desc:'recuperação'};
-  if(x<60)  return {nome:'neutro', faixa:'40–60', desc:'equilíbrio'};
-  if(x<80)  return {nome:'aquecido', faixa:'60–80', desc:'risco a subir'};
-  return {nome:'muito aquecido', faixa:'80–100', desc:'cautela'};
+  if(x<5)   return {nome:'capitulação extrema', faixa:'0–5',    desc:'reforço máximo (big dip)'};
+  if(x<10)  return {nome:'capitulação',         faixa:'5–10',   desc:'reforço agressivo'};
+  if(x<30)  return {nome:'acumulação',          faixa:'10–30',  desc:'reforços pequenos e faseados'};
+  if(x<70)  return {nome:'neutro',              faixa:'30–70',  desc:'DCA normal'};
+  if(x<90)  return {nome:'aquecido',            faixa:'70–90',  desc:'sem reforços; construir caixa'};
+  if(x<98)  return {nome:'alerta máximo',       faixa:'90–98',  desc:'zero reforços; rebalance se overweight'};
+  return       {nome:'euforia',                 faixa:'98–100', desc:'realização faseada de lucros'};
 }
 
 function setMCIUI(mci,data){

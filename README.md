@@ -72,15 +72,19 @@ MCI = 100 · p^α / ( p^α + (1−p)^α ),  α = 2.0
 
 - **Combinação ponderada:** 50% MVRV Z, 10% RSI, 20% Fear & Greed, 20% Puell. Se faltar um componente, os pesos dos restantes renormalizam.
 - **Contraste:** o valor combinado é "esticado" para os extremos (alfa = 2.0) — o índice encosta mais a 0/100 quando há confluência, sem ficar binário.
-- **Escala:**
+- **Escala (7 patamares, calibrados para DCA mensal + reforços em quedas):**
 
 | Faixa | Nome | Leitura |
 |---|---|---|
-| 0–20 | frio | acumulação |
-| 20–40 | frio/neutro | recuperação |
-| 40–60 | neutro | equilíbrio |
-| 60–80 | aquecido | risco a subir |
-| 80–100 | muito aquecido | cautela com reforços |
+| 0–5 | capitulação extrema | reforço máximo (big dip) |
+| 5–10 | capitulação | reforço agressivo |
+| 10–30 | acumulação | reforços pequenos e faseados |
+| 30–70 | neutro | DCA normal |
+| 70–90 | aquecido | sem reforços; construir caixa |
+| 90–98 | alerta máximo | zero reforços |
+| 98–100 | euforia | realização faseada de lucros |
+
+- **Média de 7 dias:** para decisões de aporte usa-se a média do MCI dos últimos 7 dias (o índice diário alterna demasiado de zona). O bot inclui esta média no aviso do aporte mensal.
 
 ## 5. Aporte mensal (dias 1 a 3)
 
