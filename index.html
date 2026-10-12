@@ -10,10 +10,11 @@
   *{box-sizing:border-box;font-family:system-ui,'Segoe UI',Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
   html,body{margin:0}
   body{background:radial-gradient(1100px 500px at 85% -10%,#1e2a5a 0%,transparent 60%),linear-gradient(160deg,var(--bg0),var(--bg1));color:var(--txt);padding:12px;font-size:15px;min-height:100vh}
-  h1{font-size:21px;margin:2px 0 6px;background:linear-gradient(90deg,#22d3ee,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h1{font-size:20px;margin:10px auto 14px;color:#fff;text-align:center;display:table;background:rgba(17,26,51,.75);
+     border:1px solid var(--line);border-radius:12px;padding:8px 18px;letter-spacing:.06em;box-shadow:0 4px 18px rgba(0,0,0,.25)}
   .sub{color:var(--mut);font-size:12.5px;line-height:1.5;margin-bottom:12px}
-  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
-  .chip{font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt)}
+  .chips{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:14px;padding-bottom:2px}
+  .chip{font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt);flex:none}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
   h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:0 0 10px}
   label{font-size:11px;color:var(--mut);display:block;margin:0 0 4px}
@@ -98,7 +99,7 @@
 </style>
 </head>
 <body>
-<h1>Plano Crypto</h1>
+<h1>PLANO CRYPTO</h1>
 <div style="margin:-4px 0 10px"><span id="syncBadge" class="sync-badge off">a ligar…</span></div>
 <div class="sub">Compras por metas com preços ao vivo. Sem chaves, sem contas — nunca insiras chaves de API ou seeds aqui.</div>
 <div class="summary" style="grid-template-columns:repeat(3,1fr);margin:0 0 6px">
@@ -113,9 +114,21 @@
   <h2 style="text-align:center">Compra de hoje</h2>
   <div class="aportewrap">
     <div class="mciwrap">
-      <div class="mciHead">
-        <div class="apl" style="margin:0">MCI (momento macro do BTC)</div>
-        <button type="button" class="infobtn" id="mciInfo" aria-label="Legenda do MCI">i</button>
+      <div class="mciHead" style="justify-content:center">
+        <button type="button" class="infobtn" id="mciCompInfo" aria-label="Componentes do MCI" style="align-self:flex-start">i</button>
+        <div style="text-align:center">
+          <div class="apl" style="margin:0">MCI (Macro Confluence Index)</div>
+          <div style="color:var(--mut);font-size:11px;margin-top:2px">• momento macro do bitcoin •</div>
+        </div>
+        <button type="button" class="infobtn" id="mciInfo" aria-label="Legenda do MCI" style="align-self:flex-start;visibility:hidden">i</button>
+      </div>
+      <div class="infopop" id="mciCompPop" hidden>
+        <div class="infotitle">Componentes e ponderações</div>
+        <div class="inforow"><span class="swatch" style="background:#6d5efc"></span><div><b>50%</b> — MVRV Z-Score (4 anos)</div></div>
+        <div class="inforow"><span class="swatch" style="background:#22d3ee"></span><div><b>10%</b> — RSI semanal (4 anos)</div></div>
+        <div class="inforow"><span class="swatch" style="background:#8b5cf6"></span><div><b>20%</b> — Fear &amp; Greed (1 ano)</div></div>
+        <div class="inforow"><span class="swatch" style="background:#34d399"></span><div><b>20%</b> — Puell Multiple (4 anos)</div></div>
+        <div class="infomut">Cada indicador é convertido em percentil da própria história antes de ser combinado. Se faltar um, os pesos dos restantes renormalizam.</div>
       </div>
       <div class="infopop" id="mciLegend" hidden>
         <div class="infotitle">Legenda (0–100)</div>
@@ -696,21 +709,27 @@ update();
 el('btnRefresh').addEventListener('click',refresh);
 el('btnSave').addEventListener('click',()=>gravar(null,true));
 
-// MCI legenda (botão i)
-if(el('mciInfo')&&el('mciLegend')){
-  el('mciInfo').addEventListener('click',e=>{
+// MCI legendas (botões i): componentes (esquerda) e escala (direita)
+function ligaPop(btnId,popId){
+  const btn=el(btnId), pop=el(popId);
+  if(!btn||!pop)return;
+  btn.addEventListener('click',e=>{
     e.stopPropagation();
-    const pop=el('mciLegend');
     if(pop.hasAttribute('hidden')) pop.removeAttribute('hidden');
     else pop.setAttribute('hidden','');
   });
-  document.addEventListener('click',e=>{
-    const pop=el('mciLegend');
+}
+ligaPop('mciInfo','mciLegend');
+ligaPop('mciCompInfo','mciCompPop');
+document.addEventListener('click',e=>{
+  ['mciLegend','mciCompPop'].forEach(id=>{
+    const pop=el(id);
     if(!pop||pop.hasAttribute('hidden'))return;
-    if(pop.contains(e.target)||el('mciInfo').contains(e.target))return;
+    const btn=el(id==='mciLegend'?'mciInfo':'mciCompInfo');
+    if(pop.contains(e.target)||(btn&&btn.contains(e.target)))return;
     pop.setAttribute('hidden','');
   });
-}
+});
 
 el('auto').addEventListener('change',()=>{if(el('auto').checked)start();else clearInterval(timer);});
 el('btnPin').addEventListener('click',lockSubmit);
