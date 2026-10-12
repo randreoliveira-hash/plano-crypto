@@ -30,7 +30,7 @@ negativo = not tendOK and not momOK and not momBetter and not hrRecup
 
 sinalVal = positivo ? 1 : negativo ? -1 : 0
 sinalTxt = positivo ? "🟢 Positivo" : negativo ? "🔴 Negativo" : "⚪ Neutro"
-corSinal = positivo ? #22c55e : negativo ? #ef4444 : #9ca3af
+corSinal = positivo ? #22c55e : negativo ? #ef4444 : color.white
 
 // ===== Visual =====
 plot(sinalVal, "BMP", color=corSinal, linewidth=3, style=plot.style_columns)
