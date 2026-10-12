@@ -1,24 +1,23 @@
 //@version=5
 // BMP — Bitcoin Momentum Pulse
-// Sinal de momentum puro, sem valuação: 🟢 Positivo (+1) | ⚪ Neutro (0) | 🔴 Negativo (-1)
-// Votação: tendência (MA200) + momentum 60d + hash ribbon (evento raro de recuperação
-// pós-capitulação de mineradores, ativo 45 dias). Precisa de 2 de 3 votos.
-// Auditoria (2018+): verde 47%, neutro 25%, vermelho 27%. Queda 2025/26: vermelho em nov-dez.
-// Fundos: verde 46-53 dias após cada fundo. Topos: sai do verde 4-47 dias após o topo.
+// Pulso de momento REATIVO (sem valuação): 🟢 Positivo (+1) | ⚪ Neutro (0) | 🔴 Negativo (-1)
+// Escalas rápidas: tendência MA50, momentum 20d, hash ribbon 14/30 (recuperação ativa 45d).
+// Votação 2 de 3. Auditoria (2018+): verde 54%, neutro 34%, vermelho 12%.
+// Fundos: verde +5 a +19 dias após cada fundo. Topos: sai do verde +4 a +7 dias após cada topo.
+// ~40 viragens/ano — pulso reativo; a dose vem do MCI (macro); o cruzamento dos dois decide.
 
 indicator("Bitcoin Momentum Pulse (BMP)", shorttitle="BMP", overlay=false, max_bars_back=500)
 
-ma200 = ta.sma(close, 200)
-tendOK = close > ma200
-mom60 = close / close[60] - 1
-momOK = mom60 > 0
+ma50 = ta.sma(close, 50)
+tendOK = close > ma50
+mom20 = close / close[20] - 1
+momOK = mom20 > 0
 hashRate = request.security("GLASSNODE:BTC_HASHRATE", "", close, lookahead=barmerge.lookahead_off)
+h14 = ta.sma(hashRate, 14)
 h30 = ta.sma(hashRate, 30)
-h60 = ta.sma(hashRate, 60)
-capForte = ta.lowest(h30 < h60 ? 1 : 0, 10) == 0
-crossUp = h30 > h60 and h30[1] <= h60[1]
-hrEvento = crossUp and capForte[1]
-hrAtivo = ta.barssince(hrEvento) < 45
+capRecente = ta.barssince(h14 < h30) < 90
+hrRecup = h14 > h30 and capRecente
+hrAtivo = ta.barssince(hrRecup) < 45
 votosPos = (tendOK ? 1 : 0) + (momOK ? 1 : 0) + (hrAtivo ? 1 : 0)
 positivo = votosPos >= 2
 negativo = not tendOK and not momOK and not hrAtivo
