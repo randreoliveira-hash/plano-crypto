@@ -54,8 +54,26 @@ Estes avisos não compram nada. Pedem uma revisão do plano.
 
 - BTC acima de 100.000 USD.
 - Medo & Ganância de 20 ou menos (medo extremo), ou de 85 ou mais (ganância extrema).
+- MCI (Macro Confluence Index): <= 20 (frio) ou >= 80 (muito aquecido).
 - Cada aviso sai ao entrar na zona. Só volta a sair depois de 7 dias fora dela.
 - Datas: 1 de dezembro de 2026 (primeiro mês), 1 de maio de 2027 (6 meses), 1 de novembro de 2027 (fim dos aportes).
+
+### O que é o MCI
+
+Termómetro macro do BTC, escala de 0 a 100. Não é sinal de compra/venda: serve para calibrar a agressividade dos aportes.
+
+- **Componentes** (cada um convertido em percentil da própria história): MVRV Z-Score (4 anos), RSI semanal (4 anos), Fear & Greed (1 ano) e Puell Multiple (4 anos).
+- **Combinação ponderada:** 50% MVRV Z, 10% RSI, 20% Fear & Greed, 20% Puell. Se faltar um componente, os pesos dos restantes renormalizam.
+- **Contraste:** o valor combinado é "esticado" para os extremos (alfa = 2.0) — o índice encosta mais a 0/100 quando há confluência, sem ficar binário.
+- **Escala:**
+
+| Faixa | Nome | Leitura |
+|---|---|---|
+| 0–20 | frio | acumulação |
+| 20–40 | frio/neutro | recuperação |
+| 40–60 | neutro | equilíbrio |
+| 60–80 | aquecido | risco a subir |
+| 80–100 | muito aquecido | cautela com reforços |
 
 ## 5. Aporte mensal (dias 1 a 3)
 
@@ -70,7 +88,7 @@ Horas em UTC: na hora de verão em Portugal são 10h, e no inverno 9h.
 
 | Quando | O que acontece |
 |---|---|
-| 09:00, todos os dias | aporte mensal, libertação, avisos de 100k e de Medo & Ganância, resumo de domingo, datas de revisão |
+| 09:00, todos os dias | aporte mensal, libertação, avisos de 100k, de Medo & Ganância e do MCI, resumo de domingo, datas de revisão |
 | 09:05, todos os dias | mensagem "VIGIA OK", para confirmar que a vigilância está ativa |
 | a cada minuto | avisos dos patamares 68k, 63k e 58k, toque em 53k e fecho semanal do máximo (domingos, 23h–24h) |
 | ao clicar em ✅ ou ❌, ou ao enviar um comando | o bot aplica e responde em 2 a 3 minutos |
@@ -81,11 +99,12 @@ Os avisos dos patamares chegam 1 a 2 minutos depois de o preço tocar o valor.
 
 - `feito 68k` e `saltar 68k` (também `63k` e `58k`)
 - `feito max` e `saltar max`
-- `estado`: mostra o preço, o F&G, o aporte do mês, os patamares, o máximo, o dinheiro parado estimado e a libertação
+- `estado`: mostra o preço, o F&G, o MCI, o aporte do mês, os patamares, o máximo, o dinheiro parado estimado e a libertação
 - Qualquer outro texto mostra a lista de comandos
 
 ## 8. O site
 
+- **MCI:** barra 0–100 (azul→vermelho) no card "Compra de hoje", com seta e valor do momento. Calculado ao abrir a página, a partir de dados públicos (Coin Metrics + Fear & Greed). Um botão "i" ao lado do título abre a legenda da escala.
 - **Preços:** Kraken, ao vivo. CoinGecko se a Kraken falhar.
 - **A COMPRAR:** quantidade a comprar de cada moeda com o aporte do dia. Ao lado de cada moeda há um ícone para copiar essa quantidade (com vírgula e sem €), para colar na Kraken.
 - **Topo:** Cripto, Fiat/Stable (euros e stablecoins, incluindo as que estão em Earn) e Total.
