@@ -1,10 +1,10 @@
 //@version=5
 // BMP — Bitcoin Momentum Pulse
-// Pulso de momento REATIVO (sem valuação): 🟢 Positivo (+1) | ⚪ Neutro (0) | 🔴 Negativo (-1)
-// Escalas rápidas: tendência MA50, momentum 20d, hash ribbon 14/30 (recuperação ativa 45d).
-// Votação 2 de 3. Auditoria (2018+): verde 54%, neutro 34%, vermelho 12%.
-// Fundos: verde +5 a +19 dias após cada fundo. Topos: sai do verde +4 a +7 dias após cada topo.
-// ~40 viragens/ano — pulso reativo; a dose vem do MCI (macro); o cruzamento dos dois decide.
+// Pulso de momento binário: 🟢 Positivo / 🔴 Negativo (sem neutro).
+// Votação 2 de 3 (3 votos ímpares = sempre há maioria): tendência MA50,
+// momentum 20d, hash ribbon 14/30 (recuperação ativa 45d).
+// Auditoria 2 estados (2018+): verde 60%, vermelho 40%, ~30 viragens/ano.
+// Fundos: verde +5 a +19 dias após cada fundo. Topos: vermelho +4 a +30 dias após cada topo.
 
 indicator("Bitcoin Momentum Pulse (BMP)", shorttitle="BMP", overlay=false, max_bars_back=500)
 
@@ -19,10 +19,8 @@ capRecente = ta.barssince(h14 < h30) < 90
 hrRecup = h14 > h30 and capRecente
 hrAtivo = ta.barssince(hrRecup) < 45
 votosPos = (tendOK ? 1 : 0) + (momOK ? 1 : 0) + (hrAtivo ? 1 : 0)
-positivo = votosPos >= 2
-negativo = not tendOK and not momOK and not hrAtivo
-sinalVal = positivo ? 1 : negativo ? -1 : 0
-corSinal = positivo ? color.green : negativo ? color.red : color.white
+sinalVal = votosPos >= 2 ? 1 : -1
+corSinal = sinalVal == 1 ? color.green : color.red
 plot(sinalVal, "BMP", color=corSinal, linewidth=1, style=plot.style_columns)
 hline(0, "Neutro", color=color.white, linestyle=hline.style_dashed)
 bgcolor(color.new(corSinal, 70))
