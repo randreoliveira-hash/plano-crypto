@@ -29,6 +29,19 @@
   .aportewrap{max-width:440px;margin:0 auto 6px;text-align:center}
   .apl{font-size:14px;color:var(--txt);font-weight:700;margin:0 0 8px}
   .aporte{font-size:20px;text-align:center;padding:13px;font-weight:800;border-radius:14px;background:linear-gradient(90deg,rgba(109,94,252,.12),rgba(34,211,238,.10));border:1px solid rgba(34,211,238,.45)}
+
+  /* MCI (Macro Confluence Index) bar */
+  .mciwrap{max-width:440px;margin:0 auto 12px;text-align:center}
+  .mciScale{display:flex;justify-content:space-between;color:var(--mut);font-size:11px;margin:0 2px 6px}
+  .mciBar{position:relative;height:12px;border-radius:999px;border:1px solid var(--line);
+          background:linear-gradient(90deg,#2563eb 0%,#22d3ee 35%,#fbbf24 70%,#ef4444 100%);
+          overflow:visible}
+  .mciPtr{position:absolute;top:-8px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;
+          border-bottom:9px solid var(--txt);filter:drop-shadow(0 2px 2px rgba(0,0,0,.55));left:50%;transform:translateX(-50%)}
+  .mciLbl{position:absolute;top:-28px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:800;color:var(--txt);
+          background:rgba(0,0,0,.35);border:1px solid var(--line);padding:2px 7px;border-radius:999px}
+  .mciSub{color:var(--mut);font-size:11.5px;margin-top:8px;min-height:14px}
+
   .coin{position:relative}
   .coin .logo{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:none}
   .coin .dot{display:none;position:absolute;left:12px;top:12px;width:30px;height:30px;border-radius:50%;align-items:center;justify-content:center;font-size:13px;font-weight:800}
@@ -84,6 +97,15 @@
 <div class="card">
   <h2 style="text-align:center">Compra de hoje</h2>
   <div class="aportewrap">
+    <div class="mciwrap">
+      <div class="apl" style="margin:0 0 6px">MCI (momento macro do BTC)</div>
+      <div class="mciScale"><span>0</span><span>100</span></div>
+      <div class="mciBar" aria-label="MCI 0 a 100">
+        <div class="mciLbl" id="mciVal">—</div>
+        <div class="mciPtr" id="mciPtr"></div>
+      </div>
+      <div class="mciSub" id="mciSub">a calcular…</div>
+    </div>
     <div class="apl">Aporte de hoje (€)</div>
     <input id="aporte" class="aporte" inputmode="decimal" placeholder="0,00">
     <div class="rowbtns" style="justify-content:center;margin-top:14px">
@@ -366,6 +388,190 @@ function buildChips(){
 }
 function effPrice(c){const m=num(el('m_'+c.sym).value);if(m>0)return {p:m,manual:true};const r=price[c.sym];return r?{p:r.p,manual:false}:null}
 
+// ===== MCI (Macro Confluence Index) =====
+// MCI v2: percentis + contraste (0-100).
+// Componentes: MVRV Z (4y), RSI 1W (4y), Fear&Greed (1y), Puell (4y).
+const MCI_CFG={
+  alpha:2.0,
+  frio:20,
+  quente:80,
+  w:{mvrv:0.50,rsi:0.10,fg:0.20,puell:0.20}
+};
+let MCI_LOADING=false;
+
+function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n));}
+function upperBound(arr,x){let lo=0,hi=arr.length;while(lo<hi){const mid=(lo+hi)>>1;if(arr[mid]<=x)lo=mid+1;else hi=mid;}return lo;}
+function percentil(valores,x){const arr=valores.filter(v=>v!=null&&isFinite(v)).slice().sort((a,b)=>a-b);if(!arr.length)return null;return upperBound(arr,x)/arr.length;}
+function contraste(p,alpha){p=clamp(p,1e-6,1-1e-6);const ap=Math.pow(p,alpha),bp=Math.pow(1-p,alpha);return 100*ap/(ap+bp);}
+
+function setMCIUI(mci,data){
+  const ptr=el('mciPtr'), lbl=el('mciVal'), sub=el('mciSub');
+  if(!ptr||!lbl||!sub)return;
+  if(mci==null||!isFinite(mci)){
+    lbl.textContent='—';
+    ptr.style.left='50%';
+    lbl.style.left='50%';
+    sub.textContent='MCI indisponível';
+    return;
+  }
+  const x=clamp(mci,0,100);
+  const pos=clamp(x,2,98);
+  ptr.style.left=pos+'%';
+  lbl.style.left=pos+'%';
+  lbl.textContent=x.toFixed(1);
+  const zona = x<=MCI_CFG.frio ? 'frio' : (x>=MCI_CFG.quente ? 'muito quente' : 'neutro');
+  sub.textContent='MCI '+zona+' · dados '+(data||'—');
+}
+
+async function refreshMCI(){
+  if(MCI_LOADING)return;
+  MCI_LOADING=true;
+  try{
+    const sub=el('mciSub');if(sub)sub.textContent='a calcular…';
+
+    const hoje=new Date();
+    const start=new Date(hoje.getTime()-2200*864e5);
+    const startISO=start.toISOString().slice(0,10);
+
+    const urlCM='https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=PriceUSD,CapMrktCurUSD,CapMVRVCur,IssTotUSD&frequency=1d&page_size=10000&start_time='+startISO;
+    const urlFG='https://api.alternative.me/fng/?limit=0&format=json';
+
+    const [cm, fg]=await Promise.all([
+      fetch(urlCM).then(r=>r.json()),
+      fetch(urlFG).then(r=>r.json())
+    ]);
+
+    const rows=(cm&&cm.data)||[];
+    if(!rows.length)throw new Error('sem dados Coin Metrics');
+
+    const dates=[], priceArr=[], mcap=[], mvrvRatio=[], issUsd=[];
+    rows.forEach(r=>{
+      const d=(r.time||'').slice(0,10);
+      const p=parseFloat(r.PriceUSD), mc=parseFloat(r.CapMrktCurUSD), mv=parseFloat(r.CapMVRVCur), iss=parseFloat(r.IssTotUSD);
+      if(!d||!(p>0)||!(mc>0)||!(mv>0)||!(iss>0))return;
+      dates.push(d); priceArr.push(p); mcap.push(mc); mvrvRatio.push(mv); issUsd.push(iss);
+    });
+    const n=dates.length;
+    if(n<500)throw new Error('histórico insuficiente');
+    const d_mci=dates[n-1];
+
+    // (A) MVRV Z-Score (rolling std 4y)
+    const win=1460;
+    const q=[]; let sum=0, sum2=0;
+    const mvrvZ=new Array(n).fill(null);
+    for(let i=0;i<n;i++){
+      const mc=mcap[i];
+      q.push(mc); sum+=mc; sum2+=mc*mc;
+      if(q.length>win){const old=q.shift(); sum-=old; sum2-=old*old;}
+      const k=q.length;
+      if(k>=365&&k>1){
+        const vari=(sum2-(sum*sum)/k)/(k-1);
+        if(vari>0){
+          const std=Math.sqrt(vari);
+          const rcap=mc/mvrvRatio[i];
+          mvrvZ[i]=(mc-rcap)/std;
+        }
+      }
+    }
+
+    // (B) Puell Multiple
+    const q2=[]; let sumIss=0;
+    const puell=new Array(n).fill(null);
+    for(let i=0;i<n;i++){
+      const v=issUsd[i];
+      q2.push(v); sumIss+=v;
+      if(q2.length>365){const old=q2.shift(); sumIss-=old;}
+      if(q2.length>=200){
+        const avg=sumIss/q2.length;
+        puell[i]=avg>0?(v/avg):null;
+      }
+    }
+
+    // (C) RSI semanal (1W), Wilder smoothing
+    const weekClose={};
+    for(let i=0;i<n;i++){
+      const dobj=new Date(dates[i]+'T00:00:00Z');
+      const day=dobj.getUTCDay(); // 0=domingo
+      const delta=(7-day)%7; // dias até domingo
+      const sun=new Date(dobj); sun.setUTCDate(dobj.getUTCDate()+delta);
+      const key=sun.toISOString().slice(0,10);
+      weekClose[key]=priceArr[i];
+    }
+    const weekEnds=Object.keys(weekClose).sort();
+    const closes=weekEnds.map(k=>weekClose[k]);
+    const rsiWeek={};
+    const period=14;
+    if(closes.length>=period+1){
+      const gains=[],losses=[];
+      for(let i=1;i<closes.length;i++){
+        const d=closes[i]-closes[i-1];
+        gains.push(d>0?d:0);
+        losses.push(d<0?-d:0);
+      }
+      let avgG=0, avgL=0;
+      for(let i=0;i<period;i++){avgG+=gains[i]; avgL+=losses[i];}
+      avgG/=period; avgL/=period;
+      const rsiVal=()=>{if(avgL===0)return 100; const rs=avgG/avgL; return 100-100/(1+rs);};
+      rsiWeek[weekEnds[period]]=rsiVal();
+      for(let j=period;j<gains.length;j++){
+        avgG=(avgG*(period-1)+gains[j])/period;
+        avgL=(avgL*(period-1)+losses[j])/period;
+        rsiWeek[weekEnds[j+1]]=rsiVal();
+      }
+    }
+    const rsi1w=new Array(n).fill(null);
+    for(let i=0;i<n;i++){
+      const dobj=new Date(dates[i]+'T00:00:00Z');
+      const prev=new Date(dobj); prev.setUTCDate(dobj.getUTCDate()-dobj.getUTCDay());
+      const key=prev.toISOString().slice(0,10);
+      if(rsiWeek[key]!=null)rsi1w[i]=rsiWeek[key];
+    }
+
+    // (D) Fear & Greed (percentil 1y)
+    const fgRows=(fg&&fg.data)||[];
+    const fgMap={};
+    fgRows.forEach(it=>{
+      const ts=parseInt(it.timestamp,10), v=parseInt(it.value,10);
+      if(!isFinite(ts)||!isFinite(v))return;
+      const d=new Date(ts*1000).toISOString().slice(0,10);
+      fgMap[d]=v;
+    });
+    const fgDates=Object.keys(fgMap).sort();
+    let fgDate=null;
+    for(let i=fgDates.length-1;i>=0;i--){if(fgDates[i]<=d_mci){fgDate=fgDates[i];break;}}
+    let p_fg=null;
+    if(fgDate){
+      const fgVal=fgMap[fgDate];
+      const idx=upperBound(fgDates,fgDate)-1;
+      const slice=fgDates.slice(Math.max(0,idx-364),idx+1).map(d=>fgMap[d]);
+      p_fg=percentil(slice,fgVal);
+    }
+
+    // Percentis macro (4y)
+    const tail=Math.max(0,n-1460);
+    const lastZ=mvrvZ[n-1], lastR=rsi1w[n-1], lastP=puell[n-1];
+    const p_mvrv=(lastZ==null)?null:percentil(mvrvZ.slice(tail),lastZ);
+    const p_rsi =(lastR==null)?null:percentil(rsi1w.slice(tail),lastR);
+    const p_puell=(lastP==null)?null:percentil(puell.slice(tail),lastP);
+
+    // Combinação (renormaliza componentes em falta)
+    let num=0, den=0;
+    [[MCI_CFG.w.mvrv,p_mvrv],[MCI_CFG.w.rsi,p_rsi],[MCI_CFG.w.fg,p_fg],[MCI_CFG.w.puell,p_puell]].forEach(([w,v])=>{
+      if(v==null||!isFinite(v))return;
+      num+=w*v; den+=w;
+    });
+    if(den===0)throw new Error('sem percentis');
+    const pComb=num/den;
+    const mci=contraste(pComb,MCI_CFG.alpha);
+    setMCIUI(mci,d_mci);
+  }catch(e){
+    console.warn('MCI falhou:',e);
+    setMCIUI(null,null);
+  }finally{
+    MCI_LOADING=false;
+  }
+}
+
 async function refresh(){
   el('status').textContent='A atualizar preços…';
   let got=false, src='';
@@ -470,6 +676,7 @@ try{
 }catch(e){}
 
 refresh();
+refreshMCI();
 start();
 lockStart();
 </script>
