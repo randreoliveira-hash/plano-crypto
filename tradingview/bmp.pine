@@ -1,0 +1,46 @@
+//@version=5
+// BMP — Bitcoin Momentum Pulse
+// Um único sinal de momentum, sem valuação:
+//   🟢 Positivo (+1) | ⚪ Neutro (0) | 🔴 Negativo (-1)
+
+indicator("Bitcoin Momentum Pulse (BMP)", shorttitle="BMP", overlay=false, max_bars_back=500)
+
+// ===== Tendência =====
+ma200  = ta.sma(close, 200)
+tendOK = close > ma200
+
+// ===== Momentum 60d =====
+mom60  = close / close[60] - 1
+momOK  = mom60 > 0
+momBetter = mom60 > mom60[7]
+
+// ===== Hash Ribbon (capitulação de mineradores) =====
+h30 = ta.sma(request.security("GLASSNODE:BTC_HASHRATE", "", close, lookahead=barmerge.lookahead_off), 30)
+h60 = ta.sma(request.security("GLASSNODE:BTC_HASHRATE", "", close, lookahead=barmerge.lookahead_off), 60)
+var bool capAtiva = false
+if h30 < h60
+    capAtiva := true
+if h30 > h60 and capAtiva
+    capAtiva := false
+hrRecup = h30 > h60 and capAtiva[1] and not capAtiva[0]
+
+// ===== Sinal =====
+positivo = (momOK and momBetter) or hrRecup or (tendOK and momOK)
+negativo = not tendOK and not momOK and not momBetter and not hrRecup
+
+sinalVal = positivo ? 1 : negativo ? -1 : 0
+sinalTxt = positivo ? "🟢 Positivo" : negativo ? "🔴 Negativo" : "⚪ Neutro"
+corSinal = positivo ? #22c55e : negativo ? #ef4444 : #9ca3af
+
+// ===== Visual =====
+plot(sinalVal, "BMP", color=corSinal, linewidth=3, style=plot.style_columns)
+hline(0, "Neutro", color=#888888, linestyle=hline.style_dashed)
+bgcolor(color.new(corSinal, 88))
+
+var label lbl = na
+if barstate.islast
+    lbl := label.new(bar_index, sinalVal, sinalTxt, style=label.style_label_left, color=corSinal, textcolor=color.white, size=size.normal)
+
+// ===== Alertas =====
+alertcondition(sinalVal == 1 and sinalVal[1] != 1, "BMP: Positivo", "BMP: virou POSITIVO 🟢")
+alertcondition(sinalVal == -1 and sinalVal[1] != -1, "BMP: Negativo", "BMP: virou NEGATIVO 🔴")
