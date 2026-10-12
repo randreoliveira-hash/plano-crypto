@@ -1,0 +1,53 @@
+//@version=5
+// TFO (Trend / Flow Oscillator) — indicador de timing, sem valuação.
+// Responde só a: "a tendência virou?" e "há dinheiro real a entrar?"
+// Regime baseado em: MA200 (tendência) + OBV (fluxo, confirmado em 21 dias).
+// Use em gráfico DIÁRIO do BTC. Par perfeito com o MCI do bot (a dose vem de lá):
+//   TFO "ACUMULAÇÃO SILENCIOSA" + bot avisa MCI <30  -> fasear reforços
+//   TFO "VIRAGEM"               + bot avisa MCI <30  -> reforço máximo
+
+indicator("TFO (Trend-Flow Oscillator)", shorttitle="TFO", overlay=false, max_bars_back=500)
+
+// ===== Tendência =====
+ma200  = ta.sma(close, 200)
+tendOK = close > ma200
+crossUp = ta.crossover(close, ma200)
+
+// ===== Fluxo (OBV) =====
+obv    = ta.obv
+obvOK  = obv > obv[21]     // fluxo positivo nas últimas ~3 semanas
+obvBad = obv < obv[21]     // fluxo a sair
+
+// ===== Estados =====
+// 4 = VIRAGEM (cruzamento fresco da MA200 com fluxo a confirmar)
+// 3 = ACUMULAÇÃO SILENCIOSA (abaixo da MA200 mas OBV a subir)
+// 2 = MARCHA (acima da MA200, fluxo a confirmar)
+// 1 = AVISO (acima da MA200 mas OBV a divergir)
+// 0 = FORA (abaixo da MA200, OBV a cair)
+viragem  = crossUp and obvOK
+acumula  = not tendOK and obvOK
+marcha   = tendOK and obvOK
+aviso    = tendOK and not obvOK
+fora     = not tendOK and not obvOK
+
+estadoVal = viragem ? 4 : acumula ? 3 : marcha ? 2 : aviso ? 1 : 0
+estadoTxt = viragem ? "VIRAGEM" : acumula ? "ACUMULAÇÃO SILENCIOSA" : marcha ? "MARCHA" : aviso ? "AVISO" : "FORA"
+corEstado = viragem ? #22c55e : acumula ? #eab308 : marcha ? #3b82f6 : aviso ? #f97316 : #ef4444
+
+// ===== Visual =====
+// linha de regime 0-4 (útil na janela de dados; o gráfico visual vem da cor)
+plot(estadoVal, "Regime", color=corEstado, linewidth=3)
+bgcolor(color.new(corEstado, 90))
+
+// MA200 no próprio painel como referência 0-200
+hline(100, "MA200 (preço acima)", color=#888888, linestyle=hline.style_dotted)
+
+var label lbl = na
+if barstate.islast
+    lbl := label.new(bar_index, estadoVal, estadoTxt, style=label.style_label_left, color=corEstado, textcolor=color.white, size=size.normal)
+
+// ===== Alertas =====
+alertcondition(viragem, "TFO: VIRAGEM", "TFO VIRAGEM: preço cruzou acima da MA200 com fluxo (OBV) a confirmar. Com MCI frio do bot = reforço máximo.")
+alertcondition(acumula and not acumula[1], "TFO: ACUMULAÇÃO SILENCIOSA", "TFO ACUMULAÇÃO SILENCIOSA: OBV a subir enquanto o preço ainda está abaixo da MA200. Preparar reforços faseados.")
+alertcondition(aviso and not aviso[1], "TFO: AVISO", "TFO AVISO: preço acima da MA200 mas OBV em divergência. Fluxo já não confirma.")
+alertcondition(fora and not fora[1], "TFO: FORA", "TFO FORA: tendência de baixa com fluxo a sair. Sem reforços.")
