@@ -1,38 +1,28 @@
 //@version=5
-// BMP — Bitcoin Momentum Pulse (versão final)
-// Pulso de momento binário: 🟢 Positivo / 🔴 Negativo (sem neutro).
-// Votação 2 de 3: tendência MA50 + momentum 20d + hash ribbon 14/30
-// (recuperação pós-capitulação de mineradores, ativa 45 dias).
-// Confirmação: o estado só muda após 5 dias consecutivos no novo sentido.
-// Auditoria (2018+): frentes verdes em MCI frio: 67% com 60d positivo,
-// retorno médio +14,8%. Fundos: verde +12 a +23 dias. Topos: vermelho +9 a +14 dias.
-// ~10 viragens/ano — sinal raro e de confiança. A dose vem do MCI (bot).
+// BMP - Bitcoin Momentum Pulse (final)
+// Binario: verde Positivo / vermelho Negativo. Votacao 2 de 3.
+// Votos: tendencia MA50 + momentum 20d + hash ribbon (45d pos-capitulacao).
+// Confirmacao: media movel de 9 dias do sinal bruto cruza zero
+// (= estado so muda apos ~5 dias consecutivos no novo sentido).
+// Auditoria (2018+): frentes verdes com MCI frio: 67% com 60d positivo,
+// retorno medio +14,8%. Fundos: verde +12 a +23 dias. Topos: vermelho +9 a +14 dias.
 
 indicator("Bitcoin Momentum Pulse (BMP)", shorttitle="BMP", overlay=false, max_bars_back=500)
-
 ma50 = ta.sma(close, 50)
 tendOK = close > ma50
 mom20 = close / close[20] - 1
 momOK = mom20 > 0
-hashRate = request.security("GLASSNODE:BTC_HASHRATE", "", close, lookahead=barmerge.lookahead_off)
-h14 = ta.sma(hashRate, 14)
-h30 = ta.sma(hashRate, 30)
+gs = "GLASSNODE:BTC_HASHRATE"
+hr = request.security(gs, "", close, lookahead=barmerge.lookahead_off)
+h14 = ta.sma(hr, 14)
+h30 = ta.sma(hr, 30)
 capRecente = ta.barssince(h14 < h30) < 90
 hrRecup = h14 > h30 and capRecente
 hrAtivo = ta.barssince(hrRecup) < 45
 votosPos = (tendOK ? 1 : 0) + (momOK ? 1 : 0) + (hrAtivo ? 1 : 0)
 raw = votosPos >= 2 ? 1 : -1
-// confirmação: 5 dias consecutivos no novo sentido
-var int estado = 0
-var int streak = 0
-if raw == estado
-    streak := 0
-else
-    streak := streak + 1
-    if streak >= 5
-        estado := raw
-        streak := 0
-sinal = estado == 0 ? 1 : estado
+suave = ta.sma(raw, 9)
+sinal = suave > 0 ? 1 : -1
 verde = color.new(color.green, 40)
 verm = color.new(color.red, 40)
 branco = color.new(color.white, 40)
