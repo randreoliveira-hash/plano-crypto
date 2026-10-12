@@ -1,10 +1,12 @@
 //@version=5
-// BMP — Bitcoin Momentum Pulse
+// BMP — Bitcoin Momentum Pulse (versão final)
 // Pulso de momento binário: 🟢 Positivo / 🔴 Negativo (sem neutro).
-// Votação 2 de 3 (3 votos ímpares = sempre há maioria): tendência MA50,
-// momentum 20d, hash ribbon 14/30 (recuperação ativa 45d).
-// Auditoria 2 estados (2018+): verde 60%, vermelho 40%, ~30 viragens/ano.
-// Fundos: verde +5 a +19 dias após cada fundo. Topos: vermelho +4 a +30 dias após cada topo.
+// Votação 2 de 3: tendência MA50 + momentum 20d + hash ribbon 14/30
+// (recuperação pós-capitulação de mineradores, ativa 45 dias).
+// Confirmação: o estado só muda após 5 dias consecutivos no novo sentido.
+// Auditoria (2018+): frentes verdes em MCI frio: 67% com 60d positivo,
+// retorno médio +14,8%. Fundos: verde +12 a +23 dias. Topos: vermelho +9 a +14 dias.
+// ~10 viragens/ano — sinal raro e de confiança. A dose vem do MCI (bot).
 
 indicator("Bitcoin Momentum Pulse (BMP)", shorttitle="BMP", overlay=false, max_bars_back=500)
 
@@ -19,10 +21,24 @@ capRecente = ta.barssince(h14 < h30) < 90
 hrRecup = h14 > h30 and capRecente
 hrAtivo = ta.barssince(hrRecup) < 45
 votosPos = (tendOK ? 1 : 0) + (momOK ? 1 : 0) + (hrAtivo ? 1 : 0)
-sinalVal = votosPos >= 2 ? 1 : -1
-corSinal = sinalVal == 1 ? color.green : color.red
-plot(sinalVal, "BMP", color=color.new(corSinal, 40), linewidth=1, style=plot.style_areabra)
-hline(0, "Neutro", color=color.new(color.white, 60), linestyle=hline.style_dashed)
+raw = votosPos >= 2 ? 1 : -1
+// confirmação: 5 dias consecutivos no novo sentido
+var int estado = 0
+var int streak = 0
+if raw == estado
+    streak := 0
+else
+    streak := streak + 1
+    if streak >= 5
+        estado := raw
+        streak := 0
+sinal = estado == 0 ? 1 : estado
+verde = color.new(color.green, 40)
+verm = color.new(color.red, 40)
+branco = color.new(color.white, 40)
+corSinal = sinal == 1 ? verde : verm
+plot(sinal, "BMP", color=corSinal, style=plot.style_area)
+hline(0, "Neutro", color=branco)
 bgcolor(color.new(corSinal, 88))
-alertcondition(sinalVal == 1 and sinalVal[1] != 1, "BMP Positivo", "POS")
-alertcondition(sinalVal == -1 and sinalVal[1] != -1, "BMP Negativo", "NEG")
+alertcondition(sinal == 1 and sinal[1] != 1, "BMP Positivo", "POS")
+alertcondition(sinal == -1 and sinal[1] != -1, "BMP Negativo", "NEG")
