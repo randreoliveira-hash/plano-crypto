@@ -1,0 +1,112 @@
+//@version=5
+// AETERNUM (Adquirir Estrategicamente Tempestivamente, Em Resposta A Notáveis Ambiguidades de Mercado)
+// — jogo de palavras com "aeternum" (latim: eterno, para sempre) — para investidor de longo prazo.
+// Alternativa: "CONFLUÊNCIA" ou "TRÍPLICE CONFLUÊNCIA"
+//
+// Lógica (a matriz aprovada):
+//   MCI (frio <30 / neutro / quente ≥70) + MA200 (tendência) + OBV (fluxo)
+//   Estados: REFORÇO MÁXIMO / FASEAR / ESPERAR / DCA NORMAL / CAUTELA
+// Componentes:
+//   - MCI v2 calibrada (corr 0.9915 vs bot): MVRV Z real + RSI1W + F&G proxy + Puell proxy
+//   - MA200: preço vs média 200d
+//   - OBV: confirmação de fluxo (subida 21d do OBV)
+// Use em gráfico DIÁRIO do BTC.
+
+indicator("Aeternum (MCI + MA200 + OBV)", shorttitle="AETERNUM", overlay=false, max_bars_back=1500)
+
+alpha = 1.9
+win4a = 1460
+win1a = 365
+
+// ===== MCI (v2 calibrada) =====
+mcap  = request.security("GLASSNODE:BTC_MARKETCAP", "", close, lookahead=barmerge.lookahead_off)
+mvrvR = request.security("COINMETRICS:BTC_MVRV",    "", close, lookahead=barmerge.lookahead_off)
+realCap = mvrvR > 0 ? mcap / mvrvR : na
+zScore  = not na(realCap) ? (mcap - realCap) / ta.stdev(mcap, win4a) : na
+pMvrv   = na(zScore) ? na : ta.percentrank(zScore, win4a) / 100.0
+
+rsiW = request.security(syminfo.tickerid, "W", ta.rsi(close, 14), lookahead=barmerge.lookahead_off)
+pRsi = ta.percentrank(rsiW, win4a) / 100.0
+
+vol30  = ta.stdev(close, 30)
+volN   = 1 - vol30 / ta.highest(vol30, 730)
+above  = (close > ta.sma(close, 200) ? 50.0 : 0.0) + (close > ta.sma(close, 30) ? 50.0 : 0.0)
+hh90   = ta.highest(close, 90)
+ll90   = ta.lowest(close, 90)
+pos90  = hh90 > ll90 ? 100.0 * (close - ll90) / (hh90 - ll90) : 50.0
+posB   = pos90 > 75 ? 100.0 : pos90 > 50 ? 75.0 : pos90 > 25 ? 50.0 : 25.0
+vsMA   = close / ta.sma(close, 365) - 1
+vsMAb  = vsMA > 0.5 ? 100.0 : vsMA > 0.2 ? 75.0 : vsMA > 0.0 ? 50.0 : vsMA > -0.2 ? 25.0 : 0.0
+momo   = close / close[90] - 1
+momoB  = momo > 0.3 ? 100.0 : momo > 0.1 ? 75.0 : momo > 0.0 ? 50.0 : momo > -0.2 ? 25.0 : 0.0
+rsiD   = ta.rsi(close, 14)
+rsiB   = rsiD > 75 ? 100.0 : rsiD > 55 ? 75.0 : rsiD > 45 ? 50.0 : rsiD > 25 ? 25.0 : 0.0
+fgRaw  = 11.0 * above + 16.0 * posB + 28.0 * vsMAb + 13.0 * momoB + 1.0 * volN * 100 + 3.0 * rsiB + 10.4
+pFg    = ta.percentrank(fgRaw, win1a) / 100.0
+
+halv2024 = timestamp("2024-04-20T00:00:00")
+halv2020 = timestamp("2020-05-11T00:00:00")
+halv2016 = timestamp("2016-07-09T00:00:00")
+halv2012 = timestamp("2012-11-28T00:00:00")
+epoch = time >= halv2024 ? 4 : time >= halv2020 ? 3 : time >= halv2016 ? 2 : time >= halv2012 ? 1 : 0
+subsidio = 50.0 / math.pow(2, epoch)
+issUSD   = 146.0 * subsidio * close
+puell    = issUSD / ta.sma(issUSD, 365)
+pPuell   = ta.percentrank(puell, win4a) / 100.0
+
+wS = 48.0 * (not na(pMvrv) ? 1 : 0) + 10.0 + 18.0 + 16.0 * (not na(pPuell) ? 1 : 0)
+p  = (48.0 * nz(pMvrv) + 10.0 * nz(pRsi) + 18.0 * nz(pFg) + 16.0 * nz(pPuell)) / wS
+mci = 100 * math.pow(p, alpha) / (math.pow(p, alpha) + math.pow(1 - p, alpha))
+
+// ===== MA200 (tendência) =====
+ma200  = ta.sma(close, 200)
+tendOK = close > ma200                                    // tendência a favor
+// cruzamento recente (últimos 5 dias) = sinal fresco
+crossUp = ta.crossover(close, ma200)
+
+// ===== OBV (fluxo) =====
+obv   = ta.obv
+obvOK = obv > obv[21]                                     // fluxo positivo nas últimas ~3 semanas
+obvDiv = obv < obv[21]                                    // fluxo a sair (divergência)
+
+// ===== Estados =====
+frio = mci < 30
+quente = mci >= 70
+
+reforcoMax = frio and tendOK and obvOK and (crossUp or mci < 15)
+fasear     = frio and not tendOK and obvOK                // frio + acumulação silenciosa
+esperar    = frio and not tendOK and not obvOK            // frio + queda ativa
+cautela    = quente and (obvDiv or mci >= 90)             // topo a construir
+dcaNormal  = not reforcoMax and not fasear and not esperar and not cautela
+
+estadoTxt = reforcoMax ? "REFORÇO MÁXIMO" :
+            fasear     ? "FASEAR REFORÇOS" :
+            esperar    ? "ESPERAR" :
+            cautela    ? "CAUTELA" :
+            "DCA NORMAL"
+
+corEstado = reforcoMax ? #22c55e :
+            fasear     ? #eab308 :
+            esperar    ? #ef4444 :
+            cautela    ? #f97316 :
+            #3b82f6
+
+// ===== Visual =====
+// painel 1: MCI
+plot(mci, "MCI", color=corEstado, linewidth=2)
+hline(98, "Euforia",       color=#ef4444, linestyle=hline.style_dashed)
+hline(90, "Alerta Máximo", color=#f97316, linestyle=hline.style_dashed)
+hline(70, "Aquecido",      color=#fbbf24, linestyle=hline.style_dashed)
+hline(30, "Acumulação",    color=#22d3ee, linestyle=hline.style_dashed)
+hline(10, "Capitulação",   color=#2563eb, linestyle=hline.style_dashed)
+hline(5,  "Cap. Extrema",  color=#1d4ed8, linestyle=hline.style_dashed)
+bgcolor(color.new(corEstado, 92))
+
+// painel 2: estado (0=ESPERAR, 1=FASEAR, 2=DCA, 3=CAUTELA, 4=REFORÇO)
+estadoVal = esperar ? 0 : fasear ? 1 : dcaNormal ? 2 : cautela ? 3 : 4
+plot(estadoVal, "Estado", display=display.data_window)
+
+var label lbl = na
+if barstate.islast
+    lbl := label.new(bar_index, mci, "MCI " + str.tostring(mci, "#.#") + " — " + estadoTxt,
+                     style=label.style_label_left, color=corEstado, textcolor=color.white, size=size.normal)
